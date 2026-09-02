@@ -1,10 +1,12 @@
+
 from selenium.webdriver.common.by import By
 from base import BasePage
-from utils.config import Config
 
 
 class PageHome(BasePage):
     """首页页面类"""
+
+    page_path = '/'
 
     def __init__(self, driver):
         """初始化方法"""
@@ -18,6 +20,10 @@ class PageHome(BasePage):
         self.search_input = (By.CSS_SELECTOR, "input[placeholder='搜索文章...']")
         self.login_button = (By.XPATH, '//header//a[contains(@href,"/login")]//button')
         self.register_button = (By.XPATH, '//header//a[contains(@href,"/register")]//button')
+        # 用户头像（登录后显示在右上角）
+        self.user_avatar = (By.CSS_SELECTOR, '.user-avatar img')
+        # Element Plus avatar 组件（可能是 el-avatar 而非 img）
+        self.user_avatar_el = (By.CSS_SELECTOR, '.user-avatar .el-avatar')
 
         # ==================== 文章列表元素 ====================
         self.article_cards = (By.CSS_SELECTOR, ".article-card")
@@ -38,14 +44,6 @@ class PageHome(BasePage):
         self.category_names = (By.CSS_SELECTOR, ".category-name")
         self.category_counts = (By.CSS_SELECTOR, ".category-count")
         self.archive_items = (By.CSS_SELECTOR, ".archive-item")
-
-    def open_url(self):
-        """打开首页"""
-        base_url = Config.get("env", "base_url")
-        self.driver.get(base_url)
-
-    # ==================== 导航栏操作 ====================
-
     def click_logo(self):
         """点击Logo回到首页"""
         self.click(self.logo)
@@ -71,6 +69,15 @@ class PageHome(BasePage):
         self.input(self.search_input, keyword)
         from selenium.webdriver.common.keys import Keys
         self.find(self.search_input).send_keys(Keys.ENTER)
+
+    def get_user_avatar_src(self):
+        """获取右上角用户头像的src属性"""
+        el = self.find(self.user_avatar)
+        return el.get_attribute('src') if el else None
+
+    def is_user_avatar_displayed(self):
+        """判断右上角用户头像是否显示"""
+        return self.is_displayed(self.user_avatar)
 
     def click_login(self):
         """点击登录按钮"""
@@ -156,7 +163,30 @@ class PageHome(BasePage):
         """获取归档列表文本"""
         return [el.text.strip() for el in self.find_all(self.archive_items)]
 
+    # ==================== 断言辅助方法 ====================
 
+    def get_all_article_texts(self):
+        """获取所有文章的完整文本(标题+摘要+作者)"""
+        cards = self.find_all(self.article_cards)
+        return [c.text for c in cards]
+
+    def assert_articles_contain_keyword(self, keyword):
+        """断言当前页所有文章标题都包含关键词"""
+        titles = self.get_all_article_titles()
+        assert len(titles) > 0, "文章列表为空"
+        for t in titles:
+            assert keyword in t, f"文章'{t}'不包含关键词'{keyword}'"
+
+    def assert_empty_state(self):
+        """断言列表为空状态"""
+        empty = self.is_empty() or self.get_article_count() == 0
+        assert empty, "预期空列表，但仍有文章"
+
+    def assert_article_count(self, expected_min=1):
+        """断言文章数量不少于指定值"""
+        count = self.get_article_count()
+        assert count >= expected_min, \
+            f"预期至少{expected_min}篇文章，实际{count}篇"
 if __name__ == '__main__':
     from utils.driver_manager import DriverManager
     hp = PageHome(DriverManager.get_driver())

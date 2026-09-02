@@ -1,165 +1,258 @@
-import time
 from selenium.webdriver.common.by import By
 from base import BasePage
-from utils.config import Config
-from utils.driver_manager import DriverManager
 
 
 class PageAdminUserManage(BasePage):
-    """管理员-用户管理页面类（UserManage.vue，路由 /admin/users）"""
+    """管理员-用户管理页面类 — 元素定位 + 原子操作"""
+
+    page_path = '/admin/users'
 
     def __init__(self, driver):
-        """初始化方法"""
         super().__init__(driver)
-        # ==================== 表格元素 ====================
+        # 表格元素
         self.table_rows = (By.CSS_SELECTOR, ".el-table__row")
-
-        # ==================== 编辑用户弹窗 ====================
+        # 编辑用户弹窗
         self.edit_dialog = (By.XPATH, '//div[contains(@class,"el-dialog")]//div[contains(@class,"el-dialog__title") and text()="编辑用户"]/ancestor::div[contains(@class,"el-dialog")]')
         self.edit_nickname = (By.XPATH, '//div[contains(@class,"el-dialog")]//label[text()="昵称"]/following::input[1]')
         self.edit_email = (By.XPATH, '//div[contains(@class,"el-dialog")]//label[text()="邮箱"]/following::input[1]')
         self.edit_save_btn = (By.XPATH, '//div[contains(@class,"el-dialog")]//button//span[text()="保存"]')
         self.edit_cancel_btn = (By.XPATH, '//div[contains(@class,"el-dialog")]//button//span[text()="取消"]')
-
-        # ==================== 重置密码弹窗 ====================
+        # 重置密码弹窗
         self.reset_pwd_dialog = (By.XPATH, '//div[contains(@class,"el-dialog")]//div[contains(@class,"el-dialog__title") and text()="重置密码"]/ancestor::div[contains(@class,"el-dialog")]')
         self.reset_pwd_input = (By.CSS_SELECTOR, 'input[type="password"][placeholder="请输入新密码"]')
         self.reset_pwd_confirm = (By.XPATH, '//div[contains(@class,"el-dialog")]//button//span[text()="确认重置"]')
         self.reset_pwd_cancel = (By.XPATH, '//div[contains(@class,"el-dialog")]//button//span[text()="取消"]')
+    def wait_for_edit_dialog(self, timeout=None):
+        """等待编辑用户弹窗出现"""
+        t = timeout if timeout is not None else self.timeout
+        from selenium.webdriver.support.wait import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        return WebDriverWait(self.driver, t).until(
+            EC.visibility_of_element_located(self.edit_nickname)
+        )
 
-    def open_url(self):
-        """打开用户管理页面（需要管理员登录）"""
-        base_url = Config.get("env", "base_url")
-        self.driver.get(f"{base_url}/admin/users")
-
-    def login_then_open(self, username, password):
-        """先登录再打开用户管理"""
-        from page.page_login import PageLogin
-        login_page = PageLogin(self.driver)
-        login_page.open_url()
-        login_page.login(username, password)
-        self.open_url()
+    def wait_for_reset_pwd_dialog(self, timeout=None):
+        """等待重置密码弹窗出现"""
+        t = timeout if timeout is not None else self.timeout
+        from selenium.webdriver.support.wait import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        return WebDriverWait(self.driver, t).until(
+            EC.visibility_of_element_located(self.reset_pwd_input)
+        )
 
     # ==================== 表格数据读取 ====================
 
     def get_table_rows(self):
-        """获取表格所有行"""
         return self.find_all(self.table_rows)
 
     def get_row_count(self):
-        """获取当前页行数"""
         return len(self.get_table_rows())
 
     def get_cell_text(self, row_index, col_index):
-        """获取指定单元格文本（从0开始）"""
         rows = self.get_table_rows()
         cells = rows[row_index].find_elements(By.CSS_SELECTOR, ".el-table__cell, td")
         return cells[col_index].text.strip()
 
     def get_user_id(self, row_index):
-        """获取指定行的用户ID"""
         return self.get_cell_text(row_index, 0)
 
     def get_username(self, row_index):
-        """获取指定行的用户名"""
         return self.get_cell_text(row_index, 1)
 
     def get_nickname(self, row_index):
-        """获取指定行的昵称"""
         return self.get_cell_text(row_index, 2)
 
     def get_email(self, row_index):
-        """获取指定行的邮箱"""
         return self.get_cell_text(row_index, 3)
 
     def get_register_time(self, row_index):
-        """获取指定行的注册时间"""
         return self.get_cell_text(row_index, 4)
 
     def get_all_usernames(self):
-        """获取当前页所有用户名"""
         return [self.get_username(i) for i in range(self.get_row_count())]
 
     # ==================== 编辑用户操作 ====================
 
     def click_edit_by_index(self, row_index):
-        """点击指定行的编辑按钮"""
         rows = self.get_table_rows()
-        btn = rows[row_index].find_element(By.XPATH, './/button[contains(text(),"编辑")]')
+        btn = rows[row_index].find_element(By.XPATH, './/button[contains(.,"编辑")]')
         btn.click()
 
     def click_edit_by_username(self, username):
-        """根据用户名找到用户并点击编辑"""
         locator = (By.XPATH,
                    f'//tr[.//td[contains(text(),"{username}")]]'
-                   f'//button[contains(text(),"编辑")]')
+                   f'//button//span[text()="编辑"]')
         self.click(locator)
 
     def input_edit_nickname(self, nickname):
-        """在编辑弹窗中输入昵称"""
-        self.input(self.edit_nickname, nickname)
+        el = self.find(self.edit_nickname)
+        el.click()
+        from selenium.webdriver.common.keys import Keys
+        el.send_keys(Keys.CONTROL, 'a')
+        el.send_keys(nickname)
 
     def input_edit_email(self, email):
-        """在编辑弹窗中输入邮箱"""
-        self.input(self.edit_email, email)
+        el = self.find(self.edit_email)
+        el.click()
+        from selenium.webdriver.common.keys import Keys
+        el.send_keys(Keys.CONTROL, 'a')
+        el.send_keys(email)
 
     def click_edit_save(self):
-        """点击编辑弹窗的保存按钮"""
         self.click(self.edit_save_btn)
-        time.sleep(1)
 
     def click_edit_cancel(self):
-        """点击编辑弹窗的取消按钮"""
         self.click(self.edit_cancel_btn)
-
-    def edit_user(self, row_index, nickname=None, email=None):
-        """编辑指定行的用户信息"""
-        self.click_edit_by_index(row_index)
-        time.sleep(0.5)
-        if nickname is not None:
-            self.input_edit_nickname(nickname)
-        if email is not None:
-            self.input_edit_email(email)
-        self.click_edit_save()
 
     # ==================== 重置密码操作 ====================
 
     def click_reset_pwd_by_index(self, row_index):
-        """点击指定行的重置密码按钮"""
         rows = self.get_table_rows()
-        btn = rows[row_index].find_element(By.XPATH, './/button[contains(text(),"重置密码")]')
+        btn = rows[row_index].find_element(By.XPATH, './/button[contains(.,"重置密码")]')
         btn.click()
 
     def click_reset_pwd_by_username(self, username):
-        """根据用户名找到用户并点击重置密码"""
         locator = (By.XPATH,
                    f'//tr[.//td[contains(text(),"{username}")]]'
-                   f'//button[contains(text(),"重置密码")]')
+                   f'//button//span[text()="重置密码"]')
         self.click(locator)
 
     def input_new_password(self, password):
-        """在重置密码弹窗中输入新密码"""
-        self.input(self.reset_pwd_input, password)
+        el = self.find(self.reset_pwd_input)
+        el.click()
+        from selenium.webdriver.common.keys import Keys
+        el.send_keys(Keys.CONTROL, 'a')
+        el.send_keys(password)
 
     def click_reset_confirm(self):
-        """点击确认重置"""
         self.click(self.reset_pwd_confirm)
-        time.sleep(1)
 
     def click_reset_cancel(self):
-        """点击取消重置"""
         self.click(self.reset_pwd_cancel)
 
-    def reset_password(self, row_index, new_password):
-        """重置指定行用户的密码"""
-        self.click_reset_pwd_by_index(row_index)
-        time.sleep(0.5)
-        self.input_new_password(new_password)
+    # ==================== 便捷方法 ====================
+
+    def _find_row_by_id(self, uid):
+        """按用户ID查找表格行索引
+
+        Args:
+            uid: 用户ID (int 或 str)
+
+        Returns:
+            行索引 (int)，未找到返回 -1
+        """
+        uid_str = str(uid)
+        rows = self.get_table_rows()
+        for i, row in enumerate(rows):
+            cells = row.find_elements(By.CSS_SELECTOR, ".el-table__cell, td")
+            if cells and cells[0].text.strip() == uid_str:
+                return i
+        return -1
+
+    @staticmethod
+    def _extract_id(raw):
+        """从 Excel 用户ID 值中提取数字ID，如 '2（zhangsan）' -> 2"""
+        import re
+        m = re.match(r'\d+', str(raw))
+        return int(m.group(0)) if m else None
+
+    @staticmethod
+    def _extract_username(raw):
+        """从 Excel 用户ID 值中提取用户名，如 '2（zhangsan）' -> 'zhangsan'"""
+        import re
+        m = re.search(r'[\uff08(](\w+)[\uff09)]', str(raw))
+        return m.group(1) if m else None
+
+    def get_nickname_by_id(self, uid):
+        """按用户ID获取昵称
+
+        Args:
+            uid: 用户ID
+
+        Returns:
+            昵称字符串，未找到返回 None
+        """
+        row_idx = self._find_row_by_id(uid)
+        if row_idx < 0:
+            return None
+        return self.get_nickname(row_idx)
+
+    def get_email_by_id(self, uid):
+        """按用户ID获取邮箱
+
+        Args:
+            uid: 用户ID
+
+        Returns:
+            邮箱字符串，未找到返回 None
+        """
+        row_idx = self._find_row_by_id(uid)
+        if row_idx < 0:
+            return None
+        return self.get_email(row_idx)
+
+    def edit_user_by_id(self, uid, new_nick, new_email):
+        """按用户ID编辑昵称和邮箱
+
+        Args:
+            uid:       用户ID
+            new_nick:  新昵称
+            new_email: 新邮箱
+
+        Returns:
+            (orig_nick, orig_email) — 原始值，用于恢复
+        """
+        row_idx = self._find_row_by_id(uid)
+        if row_idx < 0:
+            raise AssertionError(f"未找到用户ID={uid}的行")
+
+        # 读取原始值
+        orig_nick = self.get_nickname(row_idx)
+        orig_email = self.get_email(row_idx)
+
+        # 点击编辑
+        self.click_edit_by_index(row_idx)
+        self.wait_for_edit_dialog()
+
+        # 修改为新值
+        self.input_edit_nickname(new_nick)
+        self.input_edit_email(new_email)
+        self.click_edit_save()
+        self.wait_for_loading_finish()
+
+        return orig_nick, orig_email
+
+    def restore_user_by_id(self, uid, orig_nick, orig_email):
+        """恢复用户信息到原始值
+
+        Args:
+            uid:        用户ID
+            orig_nick:  原始昵称
+            orig_email: 原始邮箱
+        """
+        row_idx = self._find_row_by_id(uid)
+        if row_idx < 0:
+            return
+        self.click_edit_by_index(row_idx)
+        self.wait_for_edit_dialog()
+        self.input_edit_nickname(orig_nick)
+        self.input_edit_email(orig_email)
+        self.click_edit_save()
+        self.wait_for_loading_finish()
+
+    def reset_password_by_id(self, uid, new_pwd):
+        """按用户ID重置密码
+
+        Args:
+            uid:     用户ID
+            new_pwd: 新密码
+        """
+        row_idx = self._find_row_by_id(uid)
+        if row_idx < 0:
+            raise AssertionError(f"未找到用户ID={uid}的行")
+
+        self.click_reset_pwd_by_index(row_idx)
+        self.wait_for_reset_pwd_dialog()
+        self.input_new_password(new_pwd)
         self.click_reset_confirm()
-
-
-if __name__ == '__main__':
-    pg = PageAdminUserManage(DriverManager.get_driver())
-    pg.login_then_open("admin", "admin123")
-    print("用户列表:", pg.get_all_usernames())
-    print("行数:", pg.get_row_count())
+        self.wait_for_loading_finish()

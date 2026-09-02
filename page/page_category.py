@@ -7,6 +7,8 @@ from utils.driver_manager import DriverManager
 class PageCategory(BasePage):
     """分类页面类"""
 
+    page_path = '/category'
+
     def __init__(self, driver):
         """初始化方法"""
         super().__init__(driver)
@@ -34,12 +36,6 @@ class PageCategory(BasePage):
         # ==================== 侧边栏-标签云 ====================
         self.tag_items = (By.CSS_SELECTOR, ".tag-item")
         self.active_tag = (By.CSS_SELECTOR, ".tag-item.active")
-
-    def open_url(self):
-        """打开分类页面"""
-        base_url = Config.get("env", "base_url")
-        self.driver.get(f"{base_url}/category")
-
     def open_category_by_id(self, category_id):
         """打开指定分类页面"""
         base_url = Config.get("env", "base_url")
@@ -152,8 +148,6 @@ class PageCategory(BasePage):
         """点击第N个标签（从0开始）"""
         tags = self.find_all(self.tag_items)
         tags[index].click()
-
-
 if __name__ == '__main__':
     pg = PageCategory(DriverManager.get_driver())
     pg.open_url()

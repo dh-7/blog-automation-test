@@ -1,10 +1,11 @@
 from selenium.webdriver.common.by import By
 from base import BasePage
-from utils.config import Config
 
 
 class PageAbout(BasePage):
     """关于页面类"""
+
+    page_path = '/about'
 
     def __init__(self, driver):
         """初始化方法"""
@@ -27,14 +28,6 @@ class PageAbout(BasePage):
         # ==================== 联系方式元素 ====================
         self.contact_items = (By.CSS_SELECTOR, ".contact-item")
         self.github_link = (By.CSS_SELECTOR, ".contact-item a")
-
-    def open_url(self):
-        """打开关于页面"""
-        base_url = Config.get("env", "base_url")
-        self.driver.get(f"{base_url}/about")
-
-    # ==================== 顶部Banner操作 ====================
-
     def get_hero_title(self):
         """获取Banner标题"""
         return self.get_text(self.hero_title)
@@ -78,8 +71,6 @@ class PageAbout(BasePage):
     def click_github_link(self):
         """点击GitHub链接"""
         self.click(self.github_link)
-
-
 if __name__ == '__main__':
     from utils.driver_manager import DriverManager
     ap = PageAbout(DriverManager.get_driver())

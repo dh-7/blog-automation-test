@@ -40,8 +40,8 @@ class DriverManager:
             service = Service(executable_path=driver_path)
             cls._driver = webdriver.Chrome(service=service, options=options)
 
-            # 隐式等待
-            cls._driver.implicitly_wait(cfg.get("implicit_wait", 10))
+            # 隐式等待设为0，全部使用显式等待（WebDriverWait）
+            cls._driver.implicitly_wait(0)
 
         return cls._driver
 

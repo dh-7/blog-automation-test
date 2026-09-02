@@ -1,6 +1,9 @@
 import os
 import pytest
-from base import Config, DriverManager, BasePage
+from base import BasePage
+from utils.config import Config
+from utils.driver_manager import DriverManager
+from utils.db_snapshot import restore_baseline
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
@@ -9,6 +12,14 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 def config():
     """加载配置（整个测试会话只加载一次）"""
     return Config.load(os.path.join(PROJECT_ROOT, "config.yaml"))
+
+
+@pytest.fixture(scope="session", autouse=True)
+def db_baseline():
+    """统一的数据库基线：测试前还原干净状态，测试后再次还原"""
+    restore_baseline()
+    yield
+    restore_baseline()
 
 
 @pytest.fixture(scope="function")

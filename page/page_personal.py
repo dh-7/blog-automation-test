@@ -1,167 +1,252 @@
 from selenium.webdriver.common.by import By
 from base import BasePage
-from utils.config import Config
-from utils.driver_manager import DriverManager
+
 
 class PagePersonal(BasePage):
-    """个人中心页面类"""
+    """个人中心页面类 — 元素定位 + 原子操作"""
+
+    page_path = '/profile'
 
     def __init__(self, driver):
-        """初始化方法"""
         super().__init__(driver)
-        # ==================== 用户卡片元素 ====================
+        # 用户卡片
         self.user_name = (By.CSS_SELECTOR, ".user-name")
         self.user_desc = (By.CSS_SELECTOR, ".user-desc")
-
-        # ==================== 左侧菜单元素 ====================
-        self.menu_my_articles = (By.XPATH, '//nav//a[text()=" 我的文章"]')
+        # 左侧菜单
+        self.menu_my_articles = (By.XPATH, '//nav//a[contains(@href,"/profile") and contains(text(),"我的文章")]')
         self.menu_drafts = (By.XPATH, '//a[contains(@href,"/profile/drafts") and contains(text(),"草稿箱")]')
         self.menu_comments = (By.XPATH, '//a[contains(@href,"/profile/comments") and contains(text(),"评论管理")]')
         self.menu_favorites = (By.XPATH, '//a[contains(@href,"/profile/favorites") and contains(text(),"收藏夹")]')
         self.menu_history = (By.XPATH, '//a[contains(@href,"/profile/history") and contains(text(),"阅读历史")]')
         self.menu_settings = (By.XPATH, '//a[contains(@href,"/profile/settings") and contains(text(),"个人设置")]')
-
-        # ==================== 主内容区通用元素 ====================
+        # 主内容区
         self.page_title = (By.CSS_SELECTOR, ".page-title")
         self.empty_state = (By.CSS_SELECTOR, ".empty-state")
         self.article_items = (By.CSS_SELECTOR, ".article-item")
         self.article_titles = (By.CSS_SELECTOR, ".article-title")
         self.article_actions = (By.CSS_SELECTOR, ".article-actions")
-
-        # ==================== 评论管理元素 ====================
+        # 评论管理
         self.comment_items = (By.CSS_SELECTOR, ".comment-item")
         self.comment_contents = (By.CSS_SELECTOR, ".comment-content")
-
-        # ==================== 个人设置元素 ====================
+        # 个人设置 - 个人资料
         self.settings_tabs = (By.CSS_SELECTOR, ".tab-item")
         self.nickname_input = (By.CSS_SELECTOR, 'input[placeholder="请输入昵称"]')
         self.bio_input = (By.CSS_SELECTOR, 'textarea[placeholder="介绍一下自己..."]')
         self.avatar_input = (By.CSS_SELECTOR, 'input[placeholder="请输入头像图片URL"]')
         self.email_input = (By.CSS_SELECTOR, 'input[placeholder="aether@example.com"]')
         self.save_button = (By.XPATH, '//button//span[text()="保存设置"]')
-
-    def open_url(self):
-        """打开个人中心页面"""
-        base_url = Config.get("env", "base_url")
-        self.driver.get(f"{base_url}/profile")
-
-    def login_then_open(self, username, password):
-        """先登录再打开个人中心"""
-        import time
-        from page.page_login import PageLogin
-        login_page = PageLogin(self.driver)
-        login_page.open_url()
-        login_page.login(username, password)
-        time.sleep(1)
-        self.open_url()
-        time.sleep(1)
-
-    # ==================== 用户卡片操作 ====================
-
+        # 个人设置 - 账户安全
+        self.security_tab = (By.XPATH, '//div[contains(@class,"tab-item") and contains(text(),"账户安全")]')
+        self.old_password_input = (By.CSS_SELECTOR, 'input[placeholder="请输入原密码"]')
+        self.new_password_input = (By.CSS_SELECTOR, 'input[placeholder="请输入新密码"]')
+        self.confirm_password_input = (By.CSS_SELECTOR, 'input[placeholder="请确认新密码"]')
+        self.change_password_button = (By.XPATH, '//button[contains(.,"修改密码")]')
     def get_user_name(self):
-        """获取用户昵称"""
         return self.get_text(self.user_name)
 
     def get_user_desc(self):
-        """获取用户简介"""
         return self.get_text(self.user_desc)
 
-    # ==================== 左侧菜单操作 ====================
+    # ==================== 左侧菜单 ====================
 
     def click_my_articles(self):
-        """点击-我的文章"""
         self.click(self.menu_my_articles)
 
     def click_drafts(self):
-        """点击-草稿箱"""
         self.click(self.menu_drafts)
 
     def click_comments(self):
-        """点击-评论管理"""
         self.click(self.menu_comments)
 
     def click_favorites(self):
-        """点击-收藏夹"""
         self.click(self.menu_favorites)
 
     def click_history(self):
-        """点击-阅读历史"""
         self.click(self.menu_history)
 
     def click_settings(self):
-        """点击-个人设置"""
         self.click(self.menu_settings)
 
-    # ==================== 文章列表操作 ====================
+    # ==================== 文章列表 ====================
 
     def get_page_title(self):
-        """获取当前tab标题"""
         return self.get_text(self.page_title)
 
     def is_empty(self):
-        """判断列表是否为空"""
         return self.is_displayed(self.empty_state)
 
     def get_article_titles(self):
-        """获取当前tab下文章标题列表"""
         return [el.text for el in self.find_all(self.article_titles)]
 
+    def get_published_count(self):
+        """读取统计栏"已发布"数量"""
+        el = self.find((By.XPATH, '//span[contains(text(),"已发布")]/strong'))
+        return int(el.text.strip()) if el else 0
+
+    def get_draft_count(self):
+        """读取统计栏"草稿"数量"""
+        el = self.find((By.XPATH, '//span[contains(text(),"草稿")]/strong'))
+        return int(el.text.strip()) if el else 0
+
     def click_article_by_index(self, index):
-        """点击第N篇文章标题（从0开始）"""
         items = self.find_all(self.article_titles)
         items[index].click()
 
     def click_edit_by_index(self, index):
-        """点击第N篇文章的编辑按钮"""
-        actions = self.find_all(self.article_actions)
-        actions[index].find_element(By.XPATH, './/button[contains(text(),"编辑")]').click()
+        """点击第N篇文章的编辑按钮（从0开始）"""
+        self.find(self.article_items)
+        locator = (By.XPATH,
+                   f'(//div[contains(@class,"article-actions")])[{index + 1}]'
+                   f'//button//span[text()="编辑"]')
+        self.click(locator)
 
     def click_delete_by_index(self, index):
-        """点击第N篇文章的删除按钮"""
-        actions = self.find_all(self.article_actions)
-        actions[index].find_element(By.XPATH, './/button[contains(text(),"删除")]').click()
+        """点击第N篇文章的删除按钮（从0开始）"""
+        self.find(self.article_items)
+        locator = (By.XPATH,
+                   f'(//div[contains(@class,"article-actions")])[{index + 1}]'
+                   f'//button//span[text()="删除"]')
+        self.click(locator)
 
-    # ==================== 评论管理操作 ====================
+    # ==================== 评论管理 ====================
 
     def get_comment_contents(self):
-        """获取所有评论内容"""
         return [el.text for el in self.find_all(self.comment_contents)]
 
     def click_delete_comment_by_index(self, index):
-        """点击第N条评论的删除按钮"""
         items = self.find_all(self.comment_items)
-        items[index].find_element(By.XPATH, './/button[contains(text(),"删除")]').click()
+        items[index].find_element(By.XPATH, './/button//span[text()="删除"]').click()
 
-    # ==================== 个人设置操作 ====================
+    # ==================== 个人设置 - 个人资料 ====================
 
     def fill_nickname(self, nickname):
-        """填写昵称"""
-        self.input(self.nickname_input, nickname)
+        el = self.find(self.nickname_input)
+        el.click()
+        from selenium.webdriver.common.keys import Keys
+        el.send_keys(Keys.CONTROL, 'a')
+        el.send_keys(nickname)
 
     def fill_bio(self, bio):
-        """填写简介"""
-        self.input(self.bio_input, bio)
+        el = self.find(self.bio_input)
+        el.click()
+        from selenium.webdriver.common.keys import Keys
+        el.send_keys(Keys.CONTROL, 'a')
+        el.send_keys(bio)
 
     def fill_email(self, email):
-        """填写邮箱"""
-        self.input(self.email_input, email)
+        el = self.find(self.email_input)
+        el.click()
+        from selenium.webdriver.common.keys import Keys
+        el.send_keys(Keys.CONTROL, 'a')
+        el.send_keys(email)
 
     def click_save(self):
-        """点击保存设置"""
         self.click(self.save_button)
 
-    def update_profile(self, nickname, bio, email):
-        """一键更新个人资料"""
-        self.fill_nickname(nickname)
-        self.fill_bio(bio)
-        self.fill_email(email)
-        self.click_save()
+    # ==================== 个人设置 - 账户安全 ====================
 
-if __name__ == '__main__':
-    from utils.driver_manager import DriverManager
-    pp = PagePersonal(DriverManager.get_driver())
-    pp.login_then_open("zhangsan", "123456")
-    print("用户昵称:", pp.get_user_name())
-    print("用户简介:", pp.get_user_desc())
-    print("页面标题:", pp.get_page_title())
-    print("文章列表:", pp.get_article_titles())
+    def click_security_tab(self):
+        """点击账户安全标签页"""
+        self.click(self.security_tab)
+
+    def fill_old_password(self, pwd):
+        """填写原密码"""
+        el = self.find(self.old_password_input)
+        el.click()
+        from selenium.webdriver.common.keys import Keys
+        el.send_keys(Keys.CONTROL, 'a')
+        el.send_keys(pwd)
+
+    def fill_new_password(self, pwd):
+        """填写新密码"""
+        el = self.find(self.new_password_input)
+        el.click()
+        from selenium.webdriver.common.keys import Keys
+        el.send_keys(Keys.CONTROL, 'a')
+        el.send_keys(pwd)
+
+    def fill_confirm_password(self, pwd):
+        """填写确认密码"""
+        el = self.find(self.confirm_password_input)
+        el.click()
+        from selenium.webdriver.common.keys import Keys
+        el.send_keys(Keys.CONTROL, 'a')
+        el.send_keys(pwd)
+
+    def click_change_password(self):
+        """点击修改密码按钮"""
+        self.click(self.change_password_button)
+
+    def change_password(self, old_pwd, new_pwd):
+        """修改密码的便捷方法：填写原密码、新密码、确认密码，点击修改
+
+        Args:
+            old_pwd: 原密码
+            new_pwd: 新密码
+        """
+        self.click_security_tab()
+        self.wait_for_page_ready()
+        self.fill_old_password(old_pwd)
+        self.fill_new_password(new_pwd)
+        self.fill_confirm_password(new_pwd)
+        self.click_change_password()
+        self.wait_for_page_ready()
+
+    # ==================== 个人信息修改（便捷方法） ====================
+
+    def _get_input_value(self, locator):
+        """读取 input/textarea 的当前值"""
+        el = self.find(locator)
+        return el.get_attribute("value") or ""
+
+    def _get_textarea_value(self, locator):
+        """读取 textarea 的当前值"""
+        el = self.find(locator)
+        return el.get_attribute("value") or ""
+
+    def change_profile(self, new_nick=None, new_email=None, new_bio=None):
+        """修改个人信息的便捷方法：进入设置页，读取原值，填写新值，保存
+
+        Args:
+            new_nick:  新昵称（None 则不修改）
+            new_email: 新邮箱（None 则不修改）
+            new_bio:   新简介（None 则不修改）
+
+        Returns:
+            (orig_nick, orig_email, orig_bio) — 原始值，用于恢复
+        """
+        self.click_settings()
+        self.wait_for_page_ready()
+
+        # 读取原始值
+        orig_nick = self._get_input_value(self.nickname_input)
+        orig_email = self._get_input_value(self.email_input)
+        orig_bio = self._get_textarea_value(self.bio_input)
+
+        # 填写新值
+        if new_nick is not None:
+            self.fill_nickname(new_nick)
+        if new_email is not None:
+            self.fill_email(new_email)
+        if new_bio is not None:
+            self.fill_bio(new_bio)
+
+        self.click_save()
+        self.wait_for_page_ready()
+        return orig_nick, orig_email, orig_bio
+
+    def restore_profile(self, orig_nick, orig_email, orig_bio):
+        """恢复个人信息到原始值
+
+        Args:
+            orig_nick:  原始昵称
+            orig_email: 原始邮箱
+            orig_bio:   原始简介
+        """
+        self.click_settings()
+        self.wait_for_page_ready()
+        self.fill_nickname(orig_nick)
+        self.fill_email(orig_email)
+        self.fill_bio(orig_bio)
+        self.click_save()
+        self.wait_for_page_ready()

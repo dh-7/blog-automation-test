@@ -1,60 +1,72 @@
 from selenium.webdriver.common.by import By
-import time
 from base import BasePage
-from utils.config import Config
-from utils.driver_manager import DriverManager
 
 
 class PageLogin(BasePage):
-    """登录页面类"""
+    """登录页面类 — 元素定位 + 原子操作"""
+
+    page_path = '/login'
 
     def __init__(self, driver):
-        """初始化方法"""
-        # 获取driver对象
-        # driver = DriverTools.get_driver()
         super().__init__(driver)
-        # 设置页面实例属性
-        self.username = (By.CSS_SELECTOR,'input[placeholder="请输入用户名"]')
-        self.password = (By.XPATH,'//input[@placeholder="请输入密码"]')
-        # self.login_button = (By.XPATH,'//button[@type="button"]')
-        self.login_button = (By.XPATH,'//button//span[text()="登录"]')
-
-        # 成功结果元素属性
-        self.success_result = (By.XPATH, '//*[@id="app"]/div/header/div/div/a/text()')
-        # 失败结果元素属性 #err > span
-        self.fail_result = (By.CSS_SELECTOR, "#message_10 > p")
-
-
-    def open_url(self):
-        """打开网页"""
-        base_url = Config.get("env", "base_url")
-        self.driver.get(f"{base_url}/login")
-
-
-    def login(self, username, password):
-        """登录"""
-        # 输入账号
+        # 页面元素
+        self.username = (By.CSS_SELECTOR, 'input[placeholder="请输入用户名"]')
+        self.password = (By.XPATH, '//input[@placeholder="请输入密码"]')
+        self.login_button = (By.XPATH, '//button//span[text()="登录"]')
+        self.success_result = (By.XPATH, '//a[contains(@href,"/write")]')
+        self.fail_result = (By.CSS_SELECTOR, ".el-message--error .el-message__content")
+    def input_username(self, username):
+        """输入用户名"""
         self.input(self.username, username)
-        # 输入密码
-        self.input(self.password, password)
-        # 点击登录
-        self.click(self.login_button)
-        time.sleep(2)
 
+    def input_password(self, password):
+        """输入密码"""
+        self.input(self.password, password)
+
+    def click_login_button(self):
+        """点击登录按钮"""
+        self.click(self.login_button)
+
+    def wait_for_login_success(self, timeout=None):
+        """等待登录成功：URL 离开 /login（前端登录成功会路由跳转）
+
+        登录失败（如 v-model 未同步导致校验不通过）会停留在登录页，
+        此时等待超时并抛出异常，让失败即时暴露而不是静默继续。
+        """
+        from selenium.webdriver.support.ui import WebDriverWait
+        t = timeout or self.timeout
+        WebDriverWait(self.driver, t).until(
+            lambda d: "/login" not in d.current_url
+        )
+        self.wait_for_page_ready()
 
     def get_success_result(self):
-        """获取成功结果"""
+        """获取成功结果文本"""
         return self.find(self.success_result).text
 
     def get_fail_result(self):
-        """获取失败结果"""
+        """获取失败结果文本"""
         return self.find(self.fail_result).text
 
+    # ==================== 业务方法 ====================
 
-if __name__ == '__main__':
-    # 创建对象
-    lg = PageLogin(DriverManager.get_driver())
-    # 打开页面
-    lg.open_url()
-    # 操作登录
-    lg.login("zhangsan","123456")
+    def login(self, username, password, timeout=None):
+        """完整登录流程：打开登录页 → 填写表单 → 点击登录 → 等待跳转成功
+
+        关键：点击登录后必须等待 URL 离开 /login（前端登录接口返回且 token
+        写入后才路由跳转），否则立即导航会导致竞态——页面仍停留在登录页，
+        后续元素定位全部超时。
+        """
+        self.open_url()
+        self.input_username(username)
+        self.input_password(password)
+        self.click_login_button()
+        self.wait_for_login_success(timeout)
+
+    def login_and_navigate(self, username, password, target_url):
+        """登录后跳转到指定URL"""
+        from utils.config import Config
+        base_url = Config.get('env', 'base_url')
+        self.login(username, password)
+        self.driver.get(base_url.rstrip('/') + target_url)
+        self.wait_for_page_ready()
