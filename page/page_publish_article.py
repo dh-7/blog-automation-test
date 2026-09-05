@@ -1,5 +1,6 @@
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
+import allure
 from base import BasePage
 from utils.config import Config
 
@@ -37,6 +38,8 @@ class PagePublishArticle(BasePage):
         self.preview_area = (By.CSS_SELECTOR, ".preview-area")
         # 下拉选项
         self.dropdown_item = (By.CSS_SELECTOR, ".el-select-dropdown__item")
+
+    @allure.step("打开编辑文章")
     def open_edit_url(self, article_id):
         """打开编辑文章页面"""
         base_url = Config.get("env", "base_url")
@@ -62,6 +65,7 @@ class PagePublishArticle(BasePage):
 
     # ==================== 表单填写 ====================
 
+    @allure.step("输入文章标题")
     def input_title(self, title):
         """输入文章标题"""
         self.input(self.title_input, title)
@@ -70,21 +74,25 @@ class PagePublishArticle(BasePage):
         """获取标题输入框的值"""
         return self.find(self.title_input).get_attribute("value")
 
+    @allure.step("选择分类")
     def select_category(self, category_name):
         """选择分类"""
         self.click(self.category_select)
         self._click_dropdown_option(category_name)
 
+    @allure.step("选择标签")
     def select_tag(self, tag_name):
         """选择标签"""
         self.click(self.tag_select)
         self._click_dropdown_option(tag_name)
         self.find(self.page_header).click()
 
+    @allure.step("输入文章摘要")
     def input_summary(self, summary):
         """输入文章摘要"""
         self.input(self.summary_input, summary)
 
+    @allure.step("输入文章内容")
     def input_content(self, content):
         """输入文章内容"""
         self.input(self.content_input, content)
@@ -95,27 +103,35 @@ class PagePublishArticle(BasePage):
 
     # ==================== 编辑器工具栏 ====================
 
+    @allure.step("点击加粗")
     def click_bold(self):
         self.click(self.toolbar_bold)
 
+    @allure.step("点击斜体")
     def click_italic(self):
         self.click(self.toolbar_italic)
 
+    @allure.step("点击H1")
     def click_h1(self):
         self.click(self.toolbar_h1)
 
+    @allure.step("点击H2")
     def click_h2(self):
         self.click(self.toolbar_h2)
 
+    @allure.step("点击代码块")
     def click_code(self):
         self.click(self.toolbar_code)
 
+    @allure.step("点击引用")
     def click_quote(self):
         self.click(self.toolbar_quote)
 
+    @allure.step("点击列表")
     def click_list(self):
         self.click(self.toolbar_list)
 
+    @allure.step("切换预览")
     def toggle_preview(self):
         if self.is_displayed(self.toolbar_preview):
             self.click(self.toolbar_preview)
@@ -127,14 +143,17 @@ class PagePublishArticle(BasePage):
 
     # ==================== 按钮点击 ====================
 
+    @allure.step("点击发布文章")
     def click_publish(self):
         """点击发布文章"""
         self.click(self.publish_button)
 
+    @allure.step("点击保存修改")
     def click_save_edit(self):
         """点击保存修改"""
         self.click(self.save_edit_button)
 
+    @allure.step("点击存为草稿")
     def click_draft(self):
         """点击存为草稿"""
         self.click(self.draft_button)

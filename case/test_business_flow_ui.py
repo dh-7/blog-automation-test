@@ -92,6 +92,7 @@ def _save_as_draft(driver, u, p, title, content, summary=None):
 #  作者发布文章
 # ============================================================
 @allure.epic("UI自动化测试")
+@allure.severity(allure.severity_level.BLOCKER)
 @allure.feature("作者发布文章")
 class TestAuthorPublishFlow:
 
@@ -163,6 +164,7 @@ class TestAuthorPublishFlow:
 #  未登录跳转
 # ============================================================
 @allure.epic("UI自动化测试")
+@allure.severity(allure.severity_level.BLOCKER)
 @allure.feature("作者发布文章")
 class TestAuthRedirectFlow:
 
@@ -188,6 +190,7 @@ class TestAuthRedirectFlow:
 #  读者浏览与收藏
 # ============================================================
 @allure.epic("UI自动化测试")
+@allure.severity(allure.severity_level.CRITICAL)
 @allure.feature("读者浏览与收藏")
 class TestReaderBrowseFavoriteFlow:
 
@@ -270,6 +273,7 @@ class TestReaderBrowseFavoriteFlow:
 #  读者评论互动
 # ============================================================
 @allure.epic("UI自动化测试")
+@allure.severity(allure.severity_level.CRITICAL)
 @allure.feature("读者评论互动")
 class TestReaderCommentNotifyFlow:
 
@@ -352,6 +356,19 @@ class TestReaderCommentNotifyFlow:
     def test_mark_all_read_flow(self):
         """YW-PLHD-004: 全部已读"""
         c = _c("YW-PLHD-004")
+
+        # ── 前置准备：让其他用户给 zhangsan 的文章评论，产生一条通知 ──
+        # 选 zhangsan 的文章（文章 3 "我的 2024 年终总结"，作者为 zhangsan）
+        login(self.driver, "lisi", "123456")
+        detail = PageArticleDetail(self.driver)
+        detail.open_url("/article/3")
+        detail.wait_for_page_ready()
+        comment = PageComment(self.driver)
+        comment.input_comment("自动化测试-为触发通知而评论")
+        comment.click_submit()
+        comment.wait_for_page_ready()
+
+        # ── 正式流程：切换到 zhangsan，执行全部已读 ──
         login(self.driver, c.login_user, c.login_password)
         notif = PageNotification(self.driver)
         notif.open_url()
@@ -416,6 +433,7 @@ class TestReaderCommentNotifyFlow:
 #  阅读历史追踪
 # ============================================================
 @allure.epic("UI自动化测试")
+@allure.severity(allure.severity_level.NORMAL)
 @allure.feature("阅读历史追踪")
 class TestHistoryFlow:
 
@@ -489,6 +507,7 @@ class TestHistoryFlow:
 #  个人信息与密码管理
 # ============================================================
 @allure.epic("UI自动化测试")
+@allure.severity(allure.severity_level.NORMAL)
 @allure.feature("个人信息与密码管理")
 class TestUserInfoFlow:
 
@@ -601,6 +620,7 @@ class TestUserInfoFlow:
 #  管理员管理用户
 # ============================================================
 @allure.epic("UI自动化测试")
+@allure.severity(allure.severity_level.CRITICAL)
 @allure.feature("管理员管理用户")
 class TestAdminManageUserFlow:
 
@@ -669,6 +689,7 @@ class TestAdminManageUserFlow:
 #  管理员管理文章与评论
 # ============================================================
 @allure.epic("UI自动化测试")
+@allure.severity(allure.severity_level.CRITICAL)
 @allure.feature("管理员管理文章与评论")
 class TestAdminManageArticleCommentFlow:
 
@@ -743,6 +764,7 @@ class TestAdminManageArticleCommentFlow:
 #  文章生命周期
 # ============================================================
 @allure.epic("UI自动化测试")
+@allure.severity(allure.severity_level.BLOCKER)
 @allure.feature("文章生命周期")
 class TestArticleLifecycleFlow:
 
@@ -849,6 +871,7 @@ class TestArticleLifecycleFlow:
 #  站点访客浏览
 # ============================================================
 @allure.epic("UI自动化测试")
+@allure.severity(allure.severity_level.NORMAL)
 @allure.feature("站点访客浏览")
 class TestVisitorFlow:
 

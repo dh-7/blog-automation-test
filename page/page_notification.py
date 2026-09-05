@@ -1,6 +1,7 @@
 from selenium.webdriver.common.by import By
 from base import BasePage
 from utils.config import Config
+import allure
 
 
 class PageNotification(BasePage):
@@ -32,6 +33,7 @@ class PageNotification(BasePage):
         # 未读蓝点（通知列表中）
         self.unread_dot = (By.CSS_SELECTOR, '.unread-dot')
 
+    @allure.step("打开通知面板")
     def open_url(self, path=None):
         """打开通知页面"""
         base_url = Config.get("env", "base_url")
@@ -58,6 +60,7 @@ class PageNotification(BasePage):
         items = self.find_all(self.notification_content)
         return items[index].text
 
+    @allure.step("点击通知")
     def click_notification(self, index):
         """点击第N条通知"""
         items = self.find_all(self.notification_items)
@@ -65,10 +68,12 @@ class PageNotification(BasePage):
 
     # ==================== 批量操作 ====================
 
+    @allure.step("点击全部已读")
     def click_mark_all_read(self):
         """点击全部标记已读"""
         self.click(self.mark_all_read)
 
+    @allure.step("点击删除通知")
     def click_delete(self, index):
         """点击第N条通知的删除按钮"""
         items = self.find_all(self.delete_btn)
@@ -89,6 +94,7 @@ class PageNotification(BasePage):
         except Exception:
             return False
 
+    @allure.step("点击清空通知")
     def click_clear_all(self):
         """点击清空全部按钮；按钮不存在（无通知可清空）时返回 False"""
         if not self.has_clear_all_button():
@@ -102,6 +108,7 @@ class PageNotification(BasePage):
         """获取通知角标数字"""
         return self.get_text(self.badge)
 
+    @allure.step("点击铃铛图标")
     def click_bell(self):
         """点击导航栏铃铛图标"""
         self.click(self.notification_bell)

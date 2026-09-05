@@ -1,5 +1,6 @@
 from selenium.webdriver.common.by import By
 from base import BasePage
+import allure
 
 
 class PageArticleDetail(BasePage):
@@ -34,6 +35,7 @@ class PageArticleDetail(BasePage):
         # ==================== 返回按钮 ====================
         self.back_btn = (By.CSS_SELECTOR, ".back-btn")
 
+    @allure.step("打开文章详情")
     def open_url(self, path=None):
         """打开指定文章详情页"""
         super().open_url(path)
@@ -87,16 +89,19 @@ class PageArticleDetail(BasePage):
         """获取收藏数"""
         return self.get_text(self.favorite_count)
 
+    @allure.step("点击收藏")
     def click_favorite(self):
         """点击收藏按钮"""
         self.click(self.favorite_btn)
 
     # ==================== 评论操作 ====================
 
+    @allure.step("输入评论")
     def input_comment(self, text):
         """输入评论内容"""
         self.input(self.comment_input, text)
 
+    @allure.step("点击提交评论")
     def click_submit_comment(self):
         """点击提交评论按钮"""
         self.click(self.comment_submit)
@@ -115,15 +120,18 @@ class PageArticleDetail(BasePage):
         """获取相关文章列表"""
         return [el.text for el in self.find_all(self.related_article)]
 
+    @allure.step("点击相关文章")
     def click_related_article(self, index):
         """点击第N篇相关文章（从0开始）"""
         items = self.find_all(self.related_article)
         items[index].click()
 
+    @allure.step("点击作者名称")
     def click_author_name(self):
         """点击作者名称跳转作者页"""
         self.click(self.author_name)
 
+    @allure.step("点击返回")
     def click_back(self):
         """点击返回按钮"""
         self.click(self.back_btn)

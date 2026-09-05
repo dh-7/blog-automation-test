@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 
+import allure
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
@@ -24,12 +25,14 @@ class BasePage:
 
     # ==================== 页面导航 ====================
 
+    @allure.step("打开页面")
     def open_url(self, path=None):
         """打开页面（使用 page_path 或指定 path）"""
         base_url = Config.get("env", "base_url")
         url = f"{base_url}{path or self.page_path}"
         self.driver.get(url)
 
+    @allure.step("登录并打开")
     def login_and_open(self, username, password, path=None):
         """登录并打开本页面"""
         from page.page_login import PageLogin
@@ -66,11 +69,13 @@ class BasePage:
 
     # ==================== 元素操作 ====================
 
+    @allure.step("点击")
     def click(self, loc):
         """点击元素"""
         self.find(loc).click()
         log.info(f"点击: {loc}")
 
+    @allure.step("输入")
     def input(self, loc, text):
         """输入文本（先清空再输入）
 
@@ -98,17 +103,20 @@ class BasePage:
             pass
         log.info(f"输入: {loc} -> {text}")
 
+    @allure.step("清空")
     def clear(self, loc):
         """清空输入框"""
         self.find(loc).clear()
         log.info(f"清空: {loc}")
 
+    @allure.step("获取文本")
     def get_text(self, loc):
         """获取元素可见文本"""
         text = self.find(loc).text
         log.info(f"获取文本: {loc} -> {text}")
         return text
 
+    @allure.step("获取属性")
     def get_attribute(self, loc, attr):
         """获取元素属性值"""
         val = self.find(loc).get_attribute(attr)
@@ -168,6 +176,7 @@ class BasePage:
             EC.visibility_of_element_located(loc)
         )
 
+    @allure.step("确认弹窗")
     def confirm_dialog(self, timeout=None):
         """点击确认弹框的"确定"按钮"""
         t = timeout or self.timeout
@@ -176,6 +185,7 @@ class BasePage:
         ).click()
         log.info("点击确认弹框: 确定")
 
+    @allure.step("取消弹窗")
     def cancel_dialog(self, timeout=None):
         """点击确认弹框的"取消"按钮"""
         t = timeout or self.timeout
@@ -187,16 +197,19 @@ class BasePage:
     # ==================== 浏览器操作 ====================
 
 
+    @allure.step("刷新页面")
     def refresh(self):
         """刷新页面"""
         self.driver.refresh()
         log.info("刷新页面")
 
+    @allure.step("后退")
     def back(self):
         """浏览器后退"""
         self.driver.back()
         log.info("后退")
 
+    @allure.step("前进")
     def forward(self):
         """浏览器前进"""
         self.driver.forward()
@@ -212,6 +225,7 @@ class BasePage:
 
     # ==================== 截图 ====================
 
+    @allure.step("截图")
     def take_screenshot(self, name=None, save_dir="report"):
         """截图保存，返回文件路径"""
         os.makedirs(save_dir, exist_ok=True)
@@ -245,6 +259,7 @@ class BasePage:
             EC.text_to_be_present_in_element(loc, text)
         )
 
+    @allure.step("等待URL包含")
     def wait_for_url_contains(self, url_part, timeout=None):
         """等待 URL 包含指定字符串（页面跳转后调用）"""
         t = timeout if timeout is not None else self.timeout
@@ -267,6 +282,7 @@ class BasePage:
         except Exception:
             pass  # 非 Vue 页面或超时，不阻塞
 
+    @allure.step("等待页面加载完成")
     def wait_for_page_ready(self, timeout=None):
         """等待页面完全加载（document.readyState == complete + Vue 渲染完成）
 
@@ -290,6 +306,7 @@ class BasePage:
         except Exception:
             pass  # 非 Vue 页面或超时，不阻塞
 
+    @allure.step("等待加载结束")
     def wait_for_loading_finish(self, timeout=None):
         """等待 Element Plus loading 遮罩消失"""
         loc = (By.CSS_SELECTOR, ".el-loading-mask")
@@ -327,6 +344,7 @@ class BasePage:
             time.sleep(interval)
         return None
 
+    @allure.step("等待提示消息")
     def wait_for_toast(self, text, timeout=None):
         """等待 Element Plus toast 消息出现，返回消息文本；超时返回 None"""
         # 先立刻查找（toast 可能已经出现）

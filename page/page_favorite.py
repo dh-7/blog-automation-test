@@ -1,5 +1,6 @@
 from selenium.webdriver.common.by import By
 from base import BasePage
+import allure
 
 
 class PageFavorite(BasePage):
@@ -24,6 +25,7 @@ class PageFavorite(BasePage):
         """获取所有收藏文章标题"""
         return [el.text for el in self.find_all(self.article_title)]
 
+    @allure.step("点击取消收藏")
     def click_unfavorite(self, index):
         """点击第N篇文章的取消收藏按钮（从0开始）"""
         items = self.find_all(self.unfavorite_btn)
@@ -33,6 +35,7 @@ class PageFavorite(BasePage):
         """判断收藏列表是否为空"""
         return self.is_displayed(self.empty_state)
 
+    @allure.step("点击收藏文章")
     def click_article(self, index):
         """点击第N篇收藏文章"""
         items = self.find_all(self.favorite_items)

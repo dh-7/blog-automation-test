@@ -1,5 +1,6 @@
 from selenium.webdriver.common.by import By
 from base import BasePage
+import allure
 
 
 class PageArchive(BasePage):
@@ -43,6 +44,7 @@ class PageArchive(BasePage):
     def get_month_names(self):
         return [el.text.strip() for el in self.find_all(self.month_names)]
 
+    @allure.step("点击月份")
     def click_month_by_name(self, name):
         locator = (By.XPATH, f'//span[@class="month-name" and text()="{name}"]/ancestor::div[@class="month-item"]')
         self.click(locator)
@@ -56,6 +58,7 @@ class PageArchive(BasePage):
         els = self.find_all(self.article_dates)
         return [el.text.strip() for el in els]
 
+    @allure.step("点击归档文章")
     def click_month_article_by_title(self, title):
         locator = (By.XPATH, f'//div[@class="month-articles"]//span[@class="article-title" and text()="{title}"]/ancestor::div[@class="article-item"]')
         self.click(locator)
@@ -65,6 +68,7 @@ class PageArchive(BasePage):
     def get_category_names(self):
         return [el.text.strip() for el in self.find_all(self.category_names)]
 
+    @allure.step("点击分类")
     def click_category_by_name(self, name):
         locator = (By.XPATH, f'//div[@class="category-item"]//span[@class="category-name" and contains(text(),"{name}")]')
         self.click(locator)
@@ -72,6 +76,7 @@ class PageArchive(BasePage):
     def get_hot_article_titles(self):
         return [el.text.strip() for el in self.find_all(self.hot_titles)]
 
+    @allure.step("点击热门文章")
     def click_hot_article_by_index(self, index):
         items = self.find_all(self.hot_article_items)
         items[index].click()

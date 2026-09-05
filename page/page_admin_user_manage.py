@@ -1,5 +1,6 @@
 from selenium.webdriver.common.by import By
 from base import BasePage
+import allure
 
 
 class PageAdminUserManage(BasePage):
@@ -73,17 +74,20 @@ class PageAdminUserManage(BasePage):
 
     # ==================== 编辑用户操作 ====================
 
+    @allure.step("点击编辑用户")
     def click_edit_by_index(self, row_index):
         rows = self.get_table_rows()
         btn = rows[row_index].find_element(By.XPATH, './/button[contains(.,"编辑")]')
         btn.click()
 
+    @allure.step("按用户名编辑用户")
     def click_edit_by_username(self, username):
         locator = (By.XPATH,
                    f'//tr[.//td[contains(text(),"{username}")]]'
                    f'//button//span[text()="编辑"]')
         self.click(locator)
 
+    @allure.step("输入编辑昵称")
     def input_edit_nickname(self, nickname):
         el = self.find(self.edit_nickname)
         el.click()
@@ -91,6 +95,7 @@ class PageAdminUserManage(BasePage):
         el.send_keys(Keys.CONTROL, 'a')
         el.send_keys(nickname)
 
+    @allure.step("输入编辑邮箱")
     def input_edit_email(self, email):
         el = self.find(self.edit_email)
         el.click()
@@ -98,25 +103,30 @@ class PageAdminUserManage(BasePage):
         el.send_keys(Keys.CONTROL, 'a')
         el.send_keys(email)
 
+    @allure.step("点击保存编辑")
     def click_edit_save(self):
         self.click(self.edit_save_btn)
 
+    @allure.step("取消编辑")
     def click_edit_cancel(self):
         self.click(self.edit_cancel_btn)
 
     # ==================== 重置密码操作 ====================
 
+    @allure.step("点击重置密码")
     def click_reset_pwd_by_index(self, row_index):
         rows = self.get_table_rows()
         btn = rows[row_index].find_element(By.XPATH, './/button[contains(.,"重置密码")]')
         btn.click()
 
+    @allure.step("按用户名重置密码")
     def click_reset_pwd_by_username(self, username):
         locator = (By.XPATH,
                    f'//tr[.//td[contains(text(),"{username}")]]'
                    f'//button//span[text()="重置密码"]')
         self.click(locator)
 
+    @allure.step("输入新密码")
     def input_new_password(self, password):
         el = self.find(self.reset_pwd_input)
         el.click()
@@ -124,9 +134,11 @@ class PageAdminUserManage(BasePage):
         el.send_keys(Keys.CONTROL, 'a')
         el.send_keys(password)
 
+    @allure.step("确认重置")
     def click_reset_confirm(self):
         self.click(self.reset_pwd_confirm)
 
+    @allure.step("取消重置")
     def click_reset_cancel(self):
         self.click(self.reset_pwd_cancel)
 
@@ -191,6 +203,7 @@ class PageAdminUserManage(BasePage):
             return None
         return self.get_email(row_idx)
 
+    @allure.step("编辑用户")
     def edit_user_by_id(self, uid, new_nick, new_email):
         """按用户ID编辑昵称和邮箱
 
@@ -222,6 +235,7 @@ class PageAdminUserManage(BasePage):
 
         return orig_nick, orig_email
 
+    @allure.step("恢复用户信息")
     def restore_user_by_id(self, uid, orig_nick, orig_email):
         """恢复用户信息到原始值
 
@@ -240,6 +254,7 @@ class PageAdminUserManage(BasePage):
         self.click_edit_save()
         self.wait_for_loading_finish()
 
+    @allure.step("重置密码")
     def reset_password_by_id(self, uid, new_pwd):
         """按用户ID重置密码
 

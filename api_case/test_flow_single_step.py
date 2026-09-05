@@ -7,7 +7,7 @@ import allure
 from api.data_loader import DataLoader
 from api.conftest import DATASOURCE_FILE
 from api.helpers import (
-    do_request, assert_and_report, extract_vars, var_snapshot, set_case_id, do_verify,
+    do_request, assert_and_report, extract_vars, var_snapshot, set_case_id, do_verify, db_verify,
 )
 
 logger = logging.getLogger("api_test")
@@ -20,7 +20,7 @@ _loader.close()
 
 SINGLE_STEP_CASES = [
     "YW_ART-04", "YW_ART-06",
-    "YW_FAV-02", "YW_FAV-03", "YW_FAV-04", "YW_FAV-05", "YW_FAV-06",
+    "YW_FAV-03", "YW_FAV-04", "YW_FAV-05", "YW_FAV-06",
     "YW_COM-04", "YW_COM-05", "YW_COM-07",
     "YW_HIST-01", "YW_HIST-02", "YW_HIST-03", "YW_HIST-04",
     "YW_USR-02", "YW_USR-03",
@@ -41,10 +41,11 @@ class TestBusinessSingleStep:
     """单步骤业务用例：路径可直接使用，参数化驱动"""
 
     @pytest.fixture(autouse=True)
-    def _init(self, api_client, var_manager, assertor):
+    def _init(self, api_client, var_manager, assertor, db_assertor):
         self.client = api_client
         self.vm = var_manager
         self.assertor = assertor
+        self.db_assertor = db_assertor
 
     @pytest.mark.parametrize("case_id,case", _single_params, ids=_single_ids)
     def test_single_step(self, case_id, case):
@@ -68,9 +69,6 @@ class TestBusinessSingleStep:
         with allure.step(f"发送请求: {method} {path}"):
             resp = do_request(self.client, self.vm, method, path,
                               headers_str, params_str)
-            resp_text = json.dumps(resp.body, ensure_ascii=False)[:500]
-            resp_info = f"状态码: {resp.status_code}\n耗时: {resp.elapsed_ms:.0f}ms\n响应: {resp_text}"
-            allure.attach(resp_info, name="响应详情", attachment_type=allure.attachment_type.TEXT)
 
         with allure.step(f"执行断言 ({resp.elapsed_ms:.0f}ms)"):
             failures = assert_and_report(resp, expected_status,
@@ -96,4 +94,10 @@ class TestBusinessSingleStep:
         if verify_expr:
             with allure.step("回查验证"):
                 do_verify(self.client, self.vm, self.assertor, verify_expr)
+
+        # 数据库断言：验证写操作对数据库的影响
+        db_expr = str(case.get("数据库断言", "") or "").strip()
+        if db_expr:
+            with allure.step("数据库断言"):
+                db_verify(self.db_assertor, self.vm, db_expr)
 

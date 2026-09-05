@@ -34,6 +34,7 @@ def _publish(driver, u, p, title, content, publish_url, category_name=None, tag_
 
 
 @allure.epic("UI自动化测试")
+@allure.severity(allure.severity_level.BLOCKER)
 @allure.feature("发布文章")
 class TestPublishArticle:
     """发布文章功能 — 数据驱动测试"""

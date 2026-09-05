@@ -1,5 +1,6 @@
 from selenium.webdriver.common.by import By
 from base import BasePage
+import allure
 
 
 class PageAdminArticleManage(BasePage):
@@ -21,12 +22,15 @@ class PageAdminArticleManage(BasePage):
         self.prev_page = (By.CSS_SELECTOR, ".el-pagination .btn-prev")
         self.next_page = (By.CSS_SELECTOR, ".el-pagination .btn-next")
         self.page_numbers = (By.CSS_SELECTOR, ".el-pagination .number")
+    @allure.step("输入搜索关键词")
     def input_search(self, keyword):
         self.input(self.search_input, keyword)
 
+    @allure.step("点击搜索")
     def click_search(self):
         self.click(self.search_button)
 
+    @allure.step("清空搜索")
     def clear_search(self):
         self.clear(self.search_input)
 
@@ -83,20 +87,24 @@ class PageAdminArticleManage(BasePage):
 
     # ==================== 删除操作 ====================
 
+    @allure.step("点击删除文章")
     def click_delete_by_index(self, row_index):
         rows = self.get_table_rows()
         btn = rows[row_index].find_element(By.XPATH, './/button[contains(.,"删除")]')
         btn.click()
 
+    @allure.step("按标题删除文章")
     def click_delete_by_title(self, title):
         locator = (By.XPATH,
                    f'//tr[.//a[contains(text(),"{title}")]]'
                    f'//button[contains(.,"删除")]')
         self.click(locator)
 
+    @allure.step("确认删除")
     def confirm_delete(self):
         self.confirm_dialog()
 
+    @allure.step("取消删除")
     def cancel_delete(self):
         self.cancel_dialog()
 
@@ -105,12 +113,15 @@ class PageAdminArticleManage(BasePage):
     def has_pagination(self):
         return self.is_displayed(self.pagination)
 
+    @allure.step("点击上一页")
     def click_prev_page(self):
         self.click(self.prev_page)
 
+    @allure.step("点击下一页")
     def click_next_page(self):
         self.click(self.next_page)
 
+    @allure.step("点击页码")
     def click_page_number(self, number):
         locator = (By.XPATH, f'//ul[@class="el-pager"]//li[text()="{number}"]')
         self.click(locator)
@@ -121,6 +132,7 @@ class PageAdminArticleManage(BasePage):
 
     # ==================== 便捷方法 ====================
 
+    @allure.step("搜索文章")
     def search_article(self, title):
         """搜索文章标题，返回是否在结果中找到
 
@@ -136,6 +148,7 @@ class PageAdminArticleManage(BasePage):
         titles = self.get_all_article_titles()
         return title in titles
 
+    @allure.step("清空搜索并刷新")
     def clear_search_and_refresh(self):
         """清空搜索并刷新列表"""
         self.clear_search()

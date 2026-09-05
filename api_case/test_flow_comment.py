@@ -5,7 +5,7 @@ import pytest
 import allure
 import time
 
-from api.helpers import do_request, get_latest_comment_id
+from api.helpers import do_request, get_latest_comment_id, db_verify
 
 logger = logging.getLogger("api_test")
 
@@ -16,11 +16,12 @@ logger = logging.getLogger("api_test")
 class TestCommentFlow:
 
     @pytest.fixture(autouse=True)
-    def _init(self, api_client, var_manager, assertor, api_config):
+    def _init(self, api_client, var_manager, assertor, api_config, db_assertor):
         self.client = api_client
         self.vm = var_manager
         self.assertor = assertor
         self.config = api_config
+        self.db_assertor = db_assertor
 
     @allure.title("[YW_COM-03] 创建并删除自己的评论")
     def test_delete_own_comment_flow(self):
@@ -52,6 +53,7 @@ class TestCommentFlow:
             assert target and target.get("id"), (
                 f"未找到刚创建的评论: {content}")
             comment_id = target["id"]
+            self.vm.set("delete_comment_id", comment_id)
 
         with allure.step(f"Step 3: 删除评论 {comment_id}"):
             delete_resp = do_request(
@@ -61,7 +63,11 @@ class TestCommentFlow:
             assert delete_resp.get("code") == 200, (
                 f"删除自己的评论失败: {delete_resp.body}")
 
-        with allure.step("Step 4: 回查评论已删除"):
+        with allure.step("Step 4: 数据库断言 — 评论已软删除"):
+            db_verify(self.db_assertor, self.vm,
+                      "SELECT 1 FROM comment WHERE id = ${delete_comment_id} AND deleted = 1")
+
+        with allure.step("Step 5: 回查评论已删除"):
             verify_resp = do_request(
                 self.client, self.vm, "GET",
                 f"/api/comments/article/{article_id}",
@@ -87,7 +93,10 @@ class TestCommentFlow:
             assert resp.get("code") == 200
             comment_id = get_latest_comment_id(self.client, self.vm, article_id)
             self.vm.set("flow_comment_id", comment_id)
-        with allure.step("Step 2: 回复评论"):
+        with allure.step("Step 2: 数据库断言 — 根评论落库"):
+            db_verify(self.db_assertor, self.vm,
+                      "SELECT 1 FROM comment WHERE id = ${flow_comment_id} AND deleted = 0 AND parent_id IS NULL")
+        with allure.step("Step 3: 回复评论"):
             resp2 = do_request(self.client, self.vm, "POST", "/api/comments",
                        '{"Content-Type":"application/json",'
                        '"Authorization":"Bearer ${token}"}',
@@ -96,7 +105,7 @@ class TestCommentFlow:
                                    "parentId": comment_id,
                                    "replyUserId": 1}))
             assert resp2.get("code") == 200
-        with allure.step("Step 3: 查看评论树"):
+        with allure.step("Step 4: 查看评论树"):
             resp3 = do_request(self.client, self.vm, "GET",
                               f"/api/comments/article/{article_id}",
                               '{"Content-Type":"application/json"}')
@@ -115,7 +124,10 @@ class TestCommentFlow:
                               json.dumps({"content": "通知测试评论",
                                           "articleId": int(article_id)}))
             assert resp.get("code") == 200
-        with allure.step("Step 2: 验证通知已生成"):
+        with allure.step("Step 2: 数据库断言 — 通知已生成"):
+            db_verify(self.db_assertor, self.vm,
+                      "SELECT 1 FROM notification WHERE article_id = ${article_id} AND type = 'comment'")
+        with allure.step("Step 3: 验证通知 API 响应"):
             resp2 = do_request(self.client, self.vm, "GET",
                                "/api/notifications/unread-count",
                                '{"Content-Type":"application/json",'
@@ -136,7 +148,10 @@ class TestCommentFlow:
                                    "parentId": int(comment_id),
                                    "replyUserId": 1}))
             assert resp.get("code") == 200
-        with allure.step("Step 2: 验证通知已生成"):
+        with allure.step("Step 2: 数据库断言 — 回复通知已生成"):
+            db_verify(self.db_assertor, self.vm,
+                      "SELECT 1 FROM notification WHERE article_id = ${article_id} AND type = 'comment'")
+        with allure.step("Step 3: 验证通知 API 响应"):
             resp2 = do_request(self.client, self.vm, "GET",
                                "/api/notifications/unread-count",
                                '{"Content-Type":"application/json",'

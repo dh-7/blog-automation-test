@@ -27,9 +27,10 @@ class DriverManager:
             if chrome_path:
                 options.binary_location = chrome_path
 
-            # 无头模式
+            # 无头模式（CI 环境；无头下 --start-maximized 不生效，需显式指定窗口大小）
             if cfg.get("headless"):
                 options.add_argument("--headless")
+                options.add_argument("--window-size=1920,1080")
 
             options.add_argument("--start-maximized")
             options.add_argument("--disable-gpu")

@@ -23,14 +23,54 @@ def login(driver, username, password):
 def _auto_case_id(request):
     """自动从测试参数中提取 case_id 并设置到日志"""
     case_id = "SETUP"
+
     # 从 parametrize 参数中取 case_id
     if hasattr(request.node, 'callspec'):
         params = request.node.callspec.params
         if 'case_id' in params:
             case_id = str(params['case_id'])
+        if 'case' in params:
+            case = params['case']
+            if hasattr(case, 'module') and case.module:
+                allure.dynamic.story(case.module)
+
     _set_case_id(case_id)
+
     yield
     _set_case_id("SETUP")
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_call(item):
+    """将每个测试用例的执行包装在 allure step 中，以便报告中显示用例标题
+
+    对于数据驱动测试：step 标题为 [case_id] case.title
+    对于业务流测试：step 标题为测试方法的 docstring 第一行或方法名
+    """
+    # 获取测试标题
+    title = None
+
+    # 从动态数据获取
+    if hasattr(item, 'callspec'):
+        params = item.callspec.params
+        if 'case_id' in params and 'case' in params:
+            case = params['case']
+            cid = params.get('case_id', '')
+            if hasattr(case, 'title') and case.title:
+                title = f"[{cid}] {case.title}"
+
+    # 从 docstring 获取
+    if not title and item.function.__doc__:
+        title = item.function.__doc__.strip().split('\n')[0]
+
+    if not title:
+        title = item.name
+
+    # 设置 Allure 动态标题（用于测试用例的名称，而非 step 名称）
+    allure.dynamic.title(title)
+
+    with allure.step(title):
+        yield
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -54,15 +94,24 @@ def ui_env_config():
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
-    """测试失败时自动截图并附加到 Allure 报告"""
+    """测试失败时自动截图并附加到 Allure 报告
+
+    增强：成功时也附加截图（仅限 passed 状态），便于人工确认页面状态
+    """
     outcome = yield
     report = outcome.get_result()
-    if report.when == "call" and report.failed:
+    if report.when == "call":
         driver = item.funcargs.get("driver")
         if driver:
             try:
                 screenshot = driver.get_screenshot_as_png()
-                allure.attach(screenshot, name="失败截图",
-                              attachment_type=allure.attachment_type.PNG)
+                if report.failed:
+                    allure.attach(screenshot, name="失败截图",
+                                  attachment_type=allure.attachment_type.PNG)
+                elif report.passed:
+                    # 成功时也附加截图，便于人工确认（可选，去掉注释即可启用）
+                    # allure.attach(screenshot, name="最终页面",
+                    #               attachment_type=allure.attachment_type.PNG)
+                    pass
             except Exception:
                 pass

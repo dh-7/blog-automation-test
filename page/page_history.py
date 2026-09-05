@@ -1,5 +1,6 @@
 from selenium.webdriver.common.by import By
 from base import BasePage
+import allure
 
 
 class PageHistory(BasePage):
@@ -25,6 +26,7 @@ class PageHistory(BasePage):
         """获取所有历史文章标题"""
         return [el.text for el in self.find_all(self.article_title)]
 
+    @allure.step("点击删除历史记录")
     def click_delete(self, index):
         """点击第N条历史记录的删除按钮（从0开始）"""
         items = self.find_all(self.delete_btn)
@@ -41,6 +43,7 @@ class PageHistory(BasePage):
                 return i
         return -1
 
+    @allure.step("按标题删除历史记录")
     def click_delete_by_title(self, title):
         """按标题删除对应历史记录（数据源驱动）
 
@@ -50,6 +53,7 @@ class PageHistory(BasePage):
         assert idx >= 0, f"历史记录中未找到标题: {title}"
         self.click_delete(idx)
 
+    @allure.step("点击清空历史")
     def click_clear_all(self):
         """点击清空全部按钮"""
         self.click(self.clear_all_btn)

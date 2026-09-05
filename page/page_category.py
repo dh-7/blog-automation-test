@@ -2,6 +2,7 @@ from selenium.webdriver.common.by import By
 from base import BasePage
 from utils.config import Config
 from utils.driver_manager import DriverManager
+import allure
 
 
 class PageCategory(BasePage):
@@ -36,6 +37,7 @@ class PageCategory(BasePage):
         # ==================== 侧边栏-标签云 ====================
         self.tag_items = (By.CSS_SELECTOR, ".tag-item")
         self.active_tag = (By.CSS_SELECTOR, ".tag-item.active")
+    @allure.step("打开分类页面")
     def open_category_by_id(self, category_id):
         """打开指定分类页面"""
         base_url = Config.get("env", "base_url")
@@ -61,6 +63,7 @@ class PageCategory(BasePage):
         """获取筛选栏文本"""
         return self.get_text(self.filter_bar)
 
+    @allure.step("点击清除筛选")
     def click_clear_filter(self):
         """点击清除筛选按钮"""
         self.click(self.clear_filter_btn)
@@ -75,11 +78,13 @@ class PageCategory(BasePage):
         """获取当前文章数量"""
         return len(self.get_article_cards())
 
+    @allure.step("点击文章")
     def click_article_by_index(self, index):
         """点击第N篇文章（从0开始）"""
         cards = self.get_article_cards()
         cards[index].click()
 
+    @allure.step("点击文章标题")
     def click_article_by_title(self, title):
         """点击指定标题的文章"""
         locator = (By.XPATH,
@@ -115,6 +120,7 @@ class PageCategory(BasePage):
         """获取当前选中分类名称"""
         return self.get_text(self.active_category)
 
+    @allure.step("点击分类")
     def click_category_by_name(self, name):
         """点击指定分类"""
         locator = (By.XPATH,
@@ -122,6 +128,7 @@ class PageCategory(BasePage):
                    f'//span[@class="category-name" and contains(text(),"{name}")]')
         self.click(locator)
 
+    @allure.step("点击分类索引")
     def click_category_by_index(self, index):
         """点击第N个分类（从0开始）"""
         items = self.find_all(self.category_items)
@@ -137,6 +144,7 @@ class PageCategory(BasePage):
         """获取当前选中标签名称"""
         return self.get_text(self.active_tag).strip()
 
+    @allure.step("点击标签")
     def click_tag_by_name(self, name):
         """点击指定标签"""
         locator = (By.XPATH,
@@ -144,6 +152,7 @@ class PageCategory(BasePage):
                    f'/span[@class="tag-item" and normalize-space(text())="{name}"]')
         self.click(locator)
 
+    @allure.step("点击标签索引")
     def click_tag_by_index(self, index):
         """点击第N个标签（从0开始）"""
         tags = self.find_all(self.tag_items)

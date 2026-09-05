@@ -1,0 +1,8 @@
+# 运行自动化测试所需依赖（版本与本地验证环境一致）
+pytest==9.1.1
+selenium==4.46.0
+requests==2.34.2
+PyMySQL==1.2.0
+PyYAML==6.0.1
+openpyxl==3.1.5
+allure-pytest==2.16.0

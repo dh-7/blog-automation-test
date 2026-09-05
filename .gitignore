@@ -50,11 +50,14 @@ log/
 *.log
 *.tmp
 *.bak
+*.bak*
 
 # ========================
 # 截图 / 快照 (测试产物)
+# 注意: 数据库基线快照必须提交到仓库，CI 依赖它还原数据库
 # ========================
-snapshots/
+snapshots/*
+!snapshots/blog_db_baseline.sql
 screenshots/
 
 # ========================
@@ -94,3 +97,11 @@ $RECYCLE.BIN/
 *.swp
 *~
 .cache/
+
+# ========================
+# 本地工具目录
+# ========================
+.hermes/
+.preview/
+.workbuddy/
+.zcode/

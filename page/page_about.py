@@ -1,5 +1,6 @@
 from selenium.webdriver.common.by import By
 from base import BasePage
+import allure
 
 
 class PageAbout(BasePage):
@@ -68,6 +69,7 @@ class PageAbout(BasePage):
         """获取所有联系方式文本"""
         return [el.text.strip() for el in self.find_all(self.contact_items)]
 
+    @allure.step("点击GitHub链接")
     def click_github_link(self):
         """点击GitHub链接"""
         self.click(self.github_link)

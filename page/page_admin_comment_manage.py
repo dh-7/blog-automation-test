@@ -1,5 +1,6 @@
 from selenium.webdriver.common.by import By
 from base import BasePage
+import allure
 
 
 class PageAdminCommentManage(BasePage):
@@ -54,23 +55,28 @@ class PageAdminCommentManage(BasePage):
 
     # ==================== 删除操作 ====================
 
+    @allure.step("点击删除评论")
     def click_delete_by_index(self, row_index):
         rows = self.get_table_rows()
         btn = rows[row_index].find_element(By.XPATH, './/button[contains(.,"删除")]')
         btn.click()
 
+    @allure.step("按内容删除评论")
     def click_delete_by_content(self, content):
         locator = (By.XPATH,
                    f'//tr[.//td[contains(text(),"{content}")]]'
                    f'//button[contains(.,"删除")]')
         self.click(locator)
 
+    @allure.step("确认删除")
     def confirm_delete(self):
         self.confirm_dialog()
 
+    @allure.step("取消删除")
     def cancel_delete(self):
         self.cancel_dialog()
 
+    @allure.step("删除第一行评论")
     def delete_first_row(self):
         """删除第一行评论并确认"""
         self.click_delete_by_index(0)

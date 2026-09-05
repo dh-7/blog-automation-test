@@ -23,6 +23,7 @@ from api.data_loader import DataLoader
 from api.assertor import Assertor
 from utils.paths import API_DATASOURCE as DATASOURCE_FILE
 from utils.db_snapshot import db_connect, ensure_preset_data
+from api.db_assertor import SqlDbAssertor
 
 # 确保 config.yaml 已加载
 Config.load(os.path.join(PROJECT_ROOT, "config.yaml"))
@@ -116,6 +117,14 @@ def assertor():
 
 
 @pytest.fixture(scope="session")
+def db_assertor():
+    """数据库断言引擎（惰性连接，session 结束时关闭）"""
+    _db = SqlDbAssertor()
+    yield _db
+    _db.close()
+
+
+@pytest.fixture(scope="session")
 def api_client(api_config):
     """HTTP 客户端"""
     client = ApiClient(api_config.base_url, api_config.timeout)
@@ -205,7 +214,7 @@ def setup_login(api_snapshot, api_client, var_manager, api_config):
                 var_manager.set(var_name, row[0])
                 logger.info(f"[SETUP] {var_name}={row[0]}")
 
-        # 查询 other_id：非 testuser 的评论（供"操作别人数据"用例使用）
+# 查询 other_id：非 testuser 的评论（供"操作别人数据"用例使用）
         cur.execute(
             "SELECT id FROM comment WHERE user_id != %s AND deleted=0 ORDER BY id LIMIT 1", (uid,)
         )
@@ -213,6 +222,19 @@ def setup_login(api_snapshot, api_client, var_manager, api_config):
         if row:
             var_manager.set("other_id", row[0])
             logger.info(f"[SETUP] other_id={row[0]}")
+
+        # 查询通知 ID（用于 NTF 测试）
+        cur.execute(
+            "SELECT id FROM notification WHERE user_id=%s AND is_read=0 ORDER BY id LIMIT 1",
+            (uid,),
+        )
+        row = cur.fetchone()
+        if row:
+            var_manager.set("notify_id", row[0])
+            logger.info(f"[SETUP] notify_id={row[0]}")
+        else:
+            # 兜底，但后续测试可能因缺少通知而失败
+            logger.warning("[SETUP] 未找到通知，notify_id 未设置")
 
         conn.close()
     except Exception as e:
@@ -232,8 +254,6 @@ def setup_login(api_snapshot, api_client, var_manager, api_config):
         var_manager.set("article_id", api_config._data.get("article_id", "1"))
     if not var_manager.get("comment_id"):
         var_manager.set("comment_id", api_config._data.get("comment_id", "1"))
-    var_manager.set("notify_id", "1")
-
     logger.info(f"[SETUP] 变量池: article_id={var_manager.get('article_id')}, "
                 f"comment_id={var_manager.get('comment_id')}, user_id={var_manager.get('user_id')}")
     logger.info("=" * 60)

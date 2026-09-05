@@ -1,4 +1,5 @@
 from selenium.webdriver.common.by import By
+import allure
 from base import BasePage
 
 
@@ -15,18 +16,23 @@ class PageLogin(BasePage):
         self.login_button = (By.XPATH, '//button//span[text()="登录"]')
         self.success_result = (By.XPATH, '//a[contains(@href,"/write")]')
         self.fail_result = (By.CSS_SELECTOR, ".el-message--error .el-message__content")
+
+    @allure.step("输入用户名")
     def input_username(self, username):
         """输入用户名"""
         self.input(self.username, username)
 
+    @allure.step("输入密码")
     def input_password(self, password):
         """输入密码"""
         self.input(self.password, password)
 
+    @allure.step("点击登录按钮")
     def click_login_button(self):
         """点击登录按钮"""
         self.click(self.login_button)
 
+    @allure.step("等待登录成功")
     def wait_for_login_success(self, timeout=None):
         """等待登录成功：URL 离开 /login（前端登录成功会路由跳转）
 
@@ -50,6 +56,7 @@ class PageLogin(BasePage):
 
     # ==================== 业务方法 ====================
 
+    @allure.step("登录 {1}")
     def login(self, username, password, timeout=None):
         """完整登录流程：打开登录页 → 填写表单 → 点击登录 → 等待跳转成功
 
@@ -63,6 +70,7 @@ class PageLogin(BasePage):
         self.click_login_button()
         self.wait_for_login_success(timeout)
 
+    @allure.step("登录并跳转")
     def login_and_navigate(self, username, password, target_url):
         """登录后跳转到指定URL"""
         from utils.config import Config

@@ -1,6 +1,7 @@
 
 from selenium.webdriver.common.by import By
 from base import BasePage
+import allure
 
 
 class PageHome(BasePage):
@@ -44,26 +45,32 @@ class PageHome(BasePage):
         self.category_names = (By.CSS_SELECTOR, ".category-name")
         self.category_counts = (By.CSS_SELECTOR, ".category-count")
         self.archive_items = (By.CSS_SELECTOR, ".archive-item")
+    @allure.step("点击Logo")
     def click_logo(self):
         """点击Logo回到首页"""
         self.click(self.logo)
 
+    @allure.step("点击导航-首页")
     def click_nav_home(self):
         """点击导航-首页"""
         self.click(self.nav_home)
 
+    @allure.step("点击导航-归档")
     def click_nav_archive(self):
         """点击导航-归档"""
         self.click(self.nav_archive)
 
+    @allure.step("点击导航-分类")
     def click_nav_category(self):
         """点击导航-分类"""
         self.click(self.nav_category)
 
+    @allure.step("点击导航-关于")
     def click_nav_about(self):
         """点击导航-关于"""
         self.click(self.nav_about)
 
+    @allure.step("搜索文章")
     def search(self, keyword):
         """搜索文章"""
         self.input(self.search_input, keyword)
@@ -79,10 +86,12 @@ class PageHome(BasePage):
         """判断右上角用户头像是否显示"""
         return self.is_displayed(self.user_avatar)
 
+    @allure.step("点击登录按钮")
     def click_login(self):
         """点击登录按钮"""
         self.click(self.login_button)
 
+    @allure.step("点击注册按钮")
     def click_register(self):
         """点击注册按钮"""
         self.click(self.register_button)
@@ -97,11 +106,13 @@ class PageHome(BasePage):
         """获取当前页文章数量"""
         return len(self.get_article_cards())
 
+    @allure.step("点击文章")
     def click_article_by_index(self, index):
         """点击第N篇文章（从0开始）"""
         cards = self.get_article_cards()
         cards[index].click()
 
+    @allure.step("点击文章标题")
     def click_article_by_title(self, title):
         """点击指定标题的文章"""
         locator = (By.XPATH, f'//h2[@class="article-title" and text()="{title}"]/ancestor::div[@class="article-card"]')
@@ -122,14 +133,17 @@ class PageHome(BasePage):
 
     # ==================== 分页操作 ====================
 
+    @allure.step("点击上一页")
     def click_prev_page(self):
         """点击上一页"""
         self.click(self.prev_page)
 
+    @allure.step("点击下一页")
     def click_next_page(self):
         """点击下一页"""
         self.click(self.next_page)
 
+    @allure.step("点击页码")
     def click_page_number(self, number):
         """点击指定页码"""
         locator = (By.XPATH, f'//ul[@class="el-pager"]//li[text()="{number}"]')
@@ -154,6 +168,7 @@ class PageHome(BasePage):
         """获取所有分类名称"""
         return [el.text.strip() for el in self.find_all(self.category_names)]
 
+    @allure.step("点击分类")
     def click_category_by_name(self, name):
         """点击指定分类"""
         locator = (By.XPATH, f'//div[@class="category-item"]//span[@class="category-name" and contains(text(),"{name}")]')

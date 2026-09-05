@@ -1,4 +1,5 @@
 from selenium.webdriver.common.by import By
+import allure
 from base import BasePage
 
 
@@ -20,30 +21,38 @@ class PageRegister(BasePage):
         self.success_result = (By.CSS_SELECTOR, ".el-message--success .el-message__content")
         self.fail_result = (By.CSS_SELECTOR, ".el-message--error .el-message__content")
         self.form_error = (By.CSS_SELECTOR, ".el-form-item__error")
+
+    @allure.step("输入用户名")
     def input_username(self, username):
         """输入用户名"""
         self.input(self.username, username)
 
+    @allure.step("输入昵称")
     def input_nickname(self, nickname):
         """输入昵称"""
         self.input(self.nickname, nickname)
 
+    @allure.step("输入邮箱")
     def input_email(self, email):
         """输入邮箱"""
         self.input(self.email, email)
 
+    @allure.step("输入密码")
     def input_password(self, password):
         """输入密码"""
         self.input(self.password, password)
 
+    @allure.step("输入确认密码")
     def input_confirm_password(self, password):
         """输入确认密码"""
         self.input(self.confirm_password, password)
 
+    @allure.step("点击注册按钮")
     def click_register_button(self):
         """点击注册按钮"""
         self.click(self.register_button)
 
+    @allure.step("点击去登录")
     def click_login_link(self):
         """点击去登录链接"""
         self.click(self.login_link)

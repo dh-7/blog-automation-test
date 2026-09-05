@@ -1,5 +1,6 @@
 from selenium.webdriver.common.by import By
 from base import BasePage
+import allure
 
 
 class PageAdminDashboard(BasePage):
@@ -42,29 +43,37 @@ class PageAdminDashboard(BasePage):
 
     # ==================== 快捷操作 ====================
 
+    @allure.step("点击管理文章")
     def click_manage_articles(self):
         self.click(self.btn_manage_articles)
 
+    @allure.step("点击管理用户")
     def click_manage_users(self):
         self.click(self.btn_manage_users)
 
+    @allure.step("点击管理评论")
     def click_manage_comments(self):
         self.click(self.btn_manage_comments)
 
+    @allure.step("点击访问前台")
     def click_visit_frontend(self):
         self.click(self.btn_visit_frontend)
 
     # ==================== 侧边栏导航 ====================
 
+    @allure.step("点击仪表盘菜单")
     def click_menu_dashboard(self):
         self.click(self.menu_dashboard)
 
+    @allure.step("点击文章管理菜单")
     def click_menu_articles(self):
         self.click(self.menu_articles)
 
+    @allure.step("点击用户管理菜单")
     def click_menu_users(self):
         self.click(self.menu_users)
 
+    @allure.step("点击评论管理菜单")
     def click_menu_comments(self):
         self.click(self.menu_comments)
 
@@ -76,5 +85,6 @@ class PageAdminDashboard(BasePage):
     def get_current_user(self):
         return self.get_text(self.user_display)
 
+    @allure.step("点击退出登录")
     def click_logout(self):
         self.click(self.logout_button)

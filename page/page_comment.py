@@ -1,5 +1,6 @@
 from selenium.webdriver.common.by import By
 from base import BasePage
+import allure
 
 
 class PageComment(BasePage):
@@ -55,11 +56,13 @@ class PageComment(BasePage):
 
     # ==================== 回复操作 ====================
 
+    @allure.step("点击回复按钮")
     def click_reply(self, index):
         """点击第N条评论的回复按钮"""
         items = self.find_all(self.reply_btn)
         items[index].click()
 
+    @allure.step("输入回复内容")
     def input_reply(self, text):
         """输入回复内容"""
         # 等待回复表单出现（点击回复按钮后异步渲染）
@@ -77,6 +80,7 @@ class PageComment(BasePage):
 
     # ==================== 删除操作 ====================
 
+    @allure.step("点击删除评论")
     def click_delete(self, index):
         """点击第N条评论的删除按钮"""
         items = self.find_all(self.delete_btn)
@@ -94,10 +98,12 @@ class PageComment(BasePage):
 
     # ==================== 评论输入操作 ====================
 
+    @allure.step("输入评论")
     def input_comment(self, text):
         """输入评论内容"""
         self.input(self.comment_input, text)
 
+    @allure.step("点击发表评论")
     def click_submit(self):
         """点击发表按钮（重渲染竞态防护：stale 自动重新查找重试）"""
         from selenium.common.exceptions import StaleElementReferenceException

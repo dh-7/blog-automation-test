@@ -1,5 +1,6 @@
 from selenium.webdriver.common.by import By
 from base import BasePage
+import allure
 
 
 class PagePersonal(BasePage):
@@ -49,21 +50,27 @@ class PagePersonal(BasePage):
 
     # ==================== 左侧菜单 ====================
 
+    @allure.step("点击我的文章")
     def click_my_articles(self):
         self.click(self.menu_my_articles)
 
+    @allure.step("点击草稿箱")
     def click_drafts(self):
         self.click(self.menu_drafts)
 
+    @allure.step("点击评论管理")
     def click_comments(self):
         self.click(self.menu_comments)
 
+    @allure.step("点击收藏夹")
     def click_favorites(self):
         self.click(self.menu_favorites)
 
+    @allure.step("点击阅读历史")
     def click_history(self):
         self.click(self.menu_history)
 
+    @allure.step("点击个人设置")
     def click_settings(self):
         self.click(self.menu_settings)
 
@@ -88,10 +95,12 @@ class PagePersonal(BasePage):
         el = self.find((By.XPATH, '//span[contains(text(),"草稿")]/strong'))
         return int(el.text.strip()) if el else 0
 
+    @allure.step("点击文章")
     def click_article_by_index(self, index):
         items = self.find_all(self.article_titles)
         items[index].click()
 
+    @allure.step("点击编辑文章")
     def click_edit_by_index(self, index):
         """点击第N篇文章的编辑按钮（从0开始）"""
         self.find(self.article_items)
@@ -100,6 +109,7 @@ class PagePersonal(BasePage):
                    f'//button//span[text()="编辑"]')
         self.click(locator)
 
+    @allure.step("点击删除文章")
     def click_delete_by_index(self, index):
         """点击第N篇文章的删除按钮（从0开始）"""
         self.find(self.article_items)
@@ -113,12 +123,14 @@ class PagePersonal(BasePage):
     def get_comment_contents(self):
         return [el.text for el in self.find_all(self.comment_contents)]
 
+    @allure.step("点击删除评论")
     def click_delete_comment_by_index(self, index):
         items = self.find_all(self.comment_items)
         items[index].find_element(By.XPATH, './/button//span[text()="删除"]').click()
 
     # ==================== 个人设置 - 个人资料 ====================
 
+    @allure.step("填写昵称")
     def fill_nickname(self, nickname):
         el = self.find(self.nickname_input)
         el.click()
@@ -126,6 +138,7 @@ class PagePersonal(BasePage):
         el.send_keys(Keys.CONTROL, 'a')
         el.send_keys(nickname)
 
+    @allure.step("填写简介")
     def fill_bio(self, bio):
         el = self.find(self.bio_input)
         el.click()
@@ -133,6 +146,7 @@ class PagePersonal(BasePage):
         el.send_keys(Keys.CONTROL, 'a')
         el.send_keys(bio)
 
+    @allure.step("填写邮箱")
     def fill_email(self, email):
         el = self.find(self.email_input)
         el.click()
@@ -140,15 +154,18 @@ class PagePersonal(BasePage):
         el.send_keys(Keys.CONTROL, 'a')
         el.send_keys(email)
 
+    @allure.step("点击保存设置")
     def click_save(self):
         self.click(self.save_button)
 
     # ==================== 个人设置 - 账户安全 ====================
 
+    @allure.step("点击账户安全")
     def click_security_tab(self):
         """点击账户安全标签页"""
         self.click(self.security_tab)
 
+    @allure.step("填写原密码")
     def fill_old_password(self, pwd):
         """填写原密码"""
         el = self.find(self.old_password_input)
@@ -157,6 +174,7 @@ class PagePersonal(BasePage):
         el.send_keys(Keys.CONTROL, 'a')
         el.send_keys(pwd)
 
+    @allure.step("填写新密码")
     def fill_new_password(self, pwd):
         """填写新密码"""
         el = self.find(self.new_password_input)
@@ -165,6 +183,7 @@ class PagePersonal(BasePage):
         el.send_keys(Keys.CONTROL, 'a')
         el.send_keys(pwd)
 
+    @allure.step("填写确认密码")
     def fill_confirm_password(self, pwd):
         """填写确认密码"""
         el = self.find(self.confirm_password_input)
@@ -173,10 +192,12 @@ class PagePersonal(BasePage):
         el.send_keys(Keys.CONTROL, 'a')
         el.send_keys(pwd)
 
+    @allure.step("点击修改密码")
     def click_change_password(self):
         """点击修改密码按钮"""
         self.click(self.change_password_button)
 
+    @allure.step("修改密码")
     def change_password(self, old_pwd, new_pwd):
         """修改密码的便捷方法：填写原密码、新密码、确认密码，点击修改
 
@@ -204,6 +225,7 @@ class PagePersonal(BasePage):
         el = self.find(locator)
         return el.get_attribute("value") or ""
 
+    @allure.step("修改个人信息")
     def change_profile(self, new_nick=None, new_email=None, new_bio=None):
         """修改个人信息的便捷方法：进入设置页，读取原值，填写新值，保存
 
@@ -235,6 +257,7 @@ class PagePersonal(BasePage):
         self.wait_for_page_ready()
         return orig_nick, orig_email, orig_bio
 
+    @allure.step("恢复个人信息")
     def restore_profile(self, orig_nick, orig_email, orig_bio):
         """恢复个人信息到原始值
 

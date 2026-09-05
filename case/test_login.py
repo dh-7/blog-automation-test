@@ -16,6 +16,7 @@ _ids = [c.case_id for c in _cases]
 
 
 @allure.epic("UI自动化测试")
+@allure.severity(allure.severity_level.BLOCKER)
 @allure.feature("登录")
 class TestLogin:
     """登录功能 — 数据驱动测试"""

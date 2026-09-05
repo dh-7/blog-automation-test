@@ -1,5 +1,6 @@
 from selenium.webdriver.common.by import By
 from base import BasePage
+import allure
 
 
 class PageAuthor(BasePage):
@@ -39,6 +40,7 @@ class PageAuthor(BasePage):
         """获取作者所有文章标题"""
         return [el.text for el in self.find_all(self.article_title)]
 
+    @allure.step("点击作者文章")
     def click_article(self, index):
         """点击第N篇文章（从0开始）"""
         items = self.find_all(self.article_items)

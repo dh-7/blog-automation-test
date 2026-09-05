@@ -212,6 +212,22 @@ def ensure_preset_data(preset_articles, preset_comments, admin_username="admin")
                     conn.commit()
                     inserted_comments += 1
 
+        # ── 预置通知数据（用于 NTF 测试） ──
+        # 幂等：先查询是否存在通知
+        cur.execute(
+            "SELECT id FROM notification WHERE user_id=%s AND type='system' AND is_read=0 LIMIT 1",
+            (uid,),
+        )
+        if cur.fetchone() is None:
+            # 创建一条未读系统通知
+            cur.execute(
+                "INSERT INTO notification (user_id, from_user_id, type, content, is_read) "
+                "VALUES (%s, %s, 'system', '这是一条测试通知', 0)",
+                (uid, 0),
+            )
+            conn.commit()
+            logger.info("[预置数据] 新增 1 条通知")
+
         if inserted_articles or inserted_comments:
             logger.info(f"[预置数据] 新增 {inserted_articles} 篇文章, {inserted_comments} 条评论")
         else:

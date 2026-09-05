@@ -17,6 +17,7 @@ from api.conftest import (
     api_config,
     var_manager,
     assertor,
+    db_assertor,
     api_client,
     setup_login,
     DATASOURCE_FILE,

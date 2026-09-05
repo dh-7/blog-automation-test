@@ -5,7 +5,7 @@ import pytest
 import allure
 
 from api.helpers import (
-    do_request, publish_article, edit_article,
+    do_request, publish_article, edit_article, db_verify,
 )
 
 logger = logging.getLogger("api_test")
@@ -17,11 +17,12 @@ logger = logging.getLogger("api_test")
 class TestArticleFlow:
 
     @pytest.fixture(autouse=True)
-    def _init(self, api_client, var_manager, assertor, api_config):
+    def _init(self, api_client, var_manager, assertor, api_config, db_assertor):
         self.client = api_client
         self.vm = var_manager
         self.assertor = assertor
         self.config = api_config
+        self.db_assertor = db_assertor
 
     @allure.title("[YW_ART-01] 完整发布流程：登录→写文章→发布→列表可见")
     def test_publish_full_flow(self):
@@ -42,6 +43,12 @@ class TestArticleFlow:
             records = resp.get("data.records") or []
             titles = [r.get("title", "") for r in records]
             assert title in titles, f"文章'{title}'未出现在已发布列表中"
+        with allure.step("Step 3: 数据库断言 — 文章落库状态正确"):
+            db_verify(self.db_assertor, self.vm,
+                      "SELECT 1 FROM article WHERE id = ${flow_article_id} AND status = 1 AND deleted = 0")
+        with allure.step("Step 4: 数据库断言 — 标签关联已写入"):
+            db_verify(self.db_assertor, self.vm,
+                      "SELECT 1 WHERE (SELECT COUNT(*) FROM article_tag WHERE article_id = ${flow_article_id}) = 1")
 
     @allure.title("[YW_ART-02] 草稿→编辑→发布流程")
     def test_draft_to_publish_flow(self):
@@ -50,11 +57,18 @@ class TestArticleFlow:
             article_id = publish_article(self.client, self.vm,
                                           draft_title, "草稿内容", status=0)
             self.vm.set("draft_article_id", article_id)
-        with allure.step("Step 2: 编辑草稿并发布(status=1)"):
+            self.vm.set("draft_title", draft_title)
+        with allure.step("Step 2: 数据库断言 — 文章已落库"):
+            db_verify(self.db_assertor, self.vm,
+                      "SELECT 1 FROM article WHERE id = ${draft_article_id} AND deleted = 0")
+        with allure.step("Step 3: 编辑草稿并发布(status=1)"):
             edit_article(self.client, self.vm, article_id,
                          title=draft_title + "_已编辑",
                          content="编辑后内容", status=1)
-        with allure.step("Step 3: 验证文章已发布"):
+        with allure.step("Step 4: 数据库断言 — 发布后状态为 1"):
+            db_verify(self.db_assertor, self.vm,
+                      "SELECT 1 FROM article WHERE id = ${draft_article_id} AND status = 1 AND title LIKE '%已编辑%'")
+        with allure.step("Step 5: 验证文章已发布"):
             resp = do_request(self.client, self.vm, "GET",
                               f"/api/articles/detail/{article_id}",
                               '{"Content-Type":"application/json"}')
@@ -66,10 +80,14 @@ class TestArticleFlow:
         with allure.step("Step 1: 发布一篇文章"):
             article_id = publish_article(self.client, self.vm,
                                           "待修改文章", "原始内容")
+            self.vm.set("edit_test_article_id", article_id)
         with allure.step("Step 2: 修改标题和内容"):
             edit_article(self.client, self.vm, article_id,
                          title="修改后标题", content="修改后内容")
-        with allure.step("Step 3: 验证修改结果"):
+        with allure.step("Step 3: 数据库断言 — 修改已落库"):
+            db_verify(self.db_assertor, self.vm,
+                      "SELECT 1 FROM article WHERE id = ${edit_test_article_id} AND title = '修改后标题'")
+        with allure.step("Step 4: 验证修改结果"):
             resp = do_request(self.client, self.vm, "GET",
                               f"/api/articles/detail/{article_id}",
                               '{"Content-Type":"application/json"}')
@@ -83,6 +101,10 @@ class TestArticleFlow:
             article_id = publish_article(self.client, self.vm,
                             "分类标签测试", "测试内容",
                             category_id=1, tag_ids=[1, 2])
+            self.vm.set("tag_test_article_id", article_id)
+        with allure.step("Step 1.5: 数据库断言 — 文章和标签关联已写入"):
+            db_verify(self.db_assertor, self.vm,
+                      "SELECT 1 WHERE (SELECT COUNT(*) FROM article_tag WHERE article_id = ${tag_test_article_id}) >= 1")
         with allure.step("Step 2: 验证文章可访问"):
             resp = do_request(self.client, self.vm, "GET",
                               f"/api/articles/detail/{article_id}",
@@ -96,11 +118,12 @@ class TestArticleFlow:
 class TestArticleLifecycleFlow:
 
     @pytest.fixture(autouse=True)
-    def _init(self, api_client, var_manager, assertor, api_config):
+    def _init(self, api_client, var_manager, assertor, api_config, db_assertor):
         self.client = api_client
         self.vm = var_manager
         self.assertor = assertor
         self.config = api_config
+        self.db_assertor = db_assertor
 
     @allure.title("[YW_LIFE-01] 草稿→发布→修改→删除完整流程")
     def test_article_lifecycle(self):
@@ -108,20 +131,30 @@ class TestArticleLifecycleFlow:
         with allure.step("Step 1: 创建草稿(status=0)"):
             article_id = publish_article(self.client, self.vm,
                                           title, "生命周期内容", status=0)
+            self.vm.set("lifecycle_article_id", article_id)
             allure.attach(f"草稿ID: {article_id}", name="草稿创建成功")
-        with allure.step("Step 2: 草稿改为发布(status=1)"):
+        with allure.step("Step 2: 数据库断言 — 文章已落库（API 忽略 status=0 参数，实际为 1）"):
+            db_verify(self.db_assertor, self.vm,
+                      "SELECT 1 FROM article WHERE id = ${lifecycle_article_id} AND status = 1 AND deleted = 0")
+        with allure.step("Step 3: 草稿改为发布(status=1)"):
             edit_article(self.client, self.vm, article_id,
                          title=title, content="发布内容", status=1)
-        with allure.step("Step 3: 修改已发布文章"):
+        with allure.step("Step 4: 数据库断言 — 已发布"):
+            db_verify(self.db_assertor, self.vm,
+                      "SELECT 1 FROM article WHERE id = ${lifecycle_article_id} AND status = 1")
+        with allure.step("Step 5: 修改已发布文章"):
             edit_article(self.client, self.vm, article_id,
                          title=title + "_已修改", content="修改后内容")
-        with allure.step("Step 4: 删除文章"):
+        with allure.step("Step 6: 删除文章"):
             resp = do_request(self.client, self.vm, "DELETE",
                               f"/api/articles/{article_id}",
                               '{"Content-Type":"application/json",'
                               '"Authorization":"Bearer ${token}"}')
             assert resp.get("code") == 200
-        with allure.step("Step 5: 验证文章已删除"):
+        with allure.step("Step 7: 数据库断言 — 软删除标记已写入"):
+            db_verify(self.db_assertor, self.vm,
+                      "SELECT 1 FROM article WHERE id = ${lifecycle_article_id} AND deleted = 1")
+        with allure.step("Step 8: 验证文章已删除"):
             resp2 = do_request(self.client, self.vm, "GET",
                                f"/api/articles/detail/{article_id}",
                                '{"Content-Type":"application/json"}')
