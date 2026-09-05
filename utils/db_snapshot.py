@@ -71,11 +71,48 @@ def db_connect():
 #  基线快照导出/还原
 # ============================================================
 
+# 导出前置校验：任一不满足即拒绝导出，防止把测试污染过的数据固化成基线
+# （用例依赖的种子数据必须存活，例如 FC-PL-007 需要文章1上有非 lisi 用户的评论）
+_BASELINE_CHECKS = [
+    ("文章1存在且未删除，作者不是 lisi",
+     "SELECT COUNT(*) FROM article WHERE id=1 AND deleted=0 "
+     "AND author_id <> (SELECT id FROM user WHERE username='lisi' AND deleted=0)", 1),
+    ("文章1存在非 lisi 用户发表的可见评论（回复通知类用例的前置数据）",
+     "SELECT COUNT(*) FROM comment WHERE article_id=1 AND deleted=0 "
+     "AND user_id <> (SELECT id FROM user WHERE username='lisi' AND deleted=0)", 1),
+    ("种子账号 admin/zhangsan/lisi/testuser 均存在且未删除",
+     "SELECT COUNT(*) FROM user WHERE username IN "
+     "('admin','zhangsan','lisi','testuser') AND deleted=0", 4),
+]
+
+
+def _check_baseline_preconditions():
+    """校验当前 DB 满足干净基线要求，不满足则抛 RuntimeError"""
+    conn = db_connect()
+    try:
+        cur = conn.cursor()
+        failures = []
+        for desc, sql, min_expected in _BASELINE_CHECKS:
+            cur.execute(sql)
+            got = cur.fetchone()[0]
+            if got < min_expected:
+                failures.append(f"{desc}：期望 >= {min_expected}，实际 {got}")
+        if failures:
+            raise RuntimeError(
+                "[基线快照] 当前数据库不满足干净基线要求，拒绝导出：\n  - "
+                + "\n  - ".join(failures)
+                + "\n请先恢复种子数据（评论/文章 deleted 标记、种子账号）后再导出"
+            )
+    finally:
+        conn.close()
+
+
 def export_baseline():
     """导出当前 DB 为基线快照（一次性手动生成，应提交到 Git）
 
     要求：在 DB 处于干净状态时执行（无测试残留数据）
     """
+    _check_baseline_preconditions()
     os.makedirs(SNAPSHOT_DIR, exist_ok=True)
     cfg = _db_config()
     dump_cmd = _mysql_cmd("mysqldump") + [
