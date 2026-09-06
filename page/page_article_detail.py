@@ -151,13 +151,27 @@ class PageArticleDetail(BasePage):
         for r in related:
             assert title not in r, f"相关文章中不应包含'{title}'"
 
-    def assert_comment_exists(self, text):
-        """断言评论区包含指定文本的评论"""
-        comments = self.find_all(self.comment_list)
-        for c in comments:
-            if text in c.text:
+    def assert_comment_exists(self, text, timeout=5):
+        """断言评论区出现含指定文本的评论（轮询等待）
+
+        评论提交成功（toast"评论成功"）后，前端异步刷新评论列表，单次读取
+        可能拿到刷新前的旧列表（FC-PL-006 偶现失败的根因），因此在窗口期
+        内轮询直到新评论渲染；超时仍未出现则失败——真实丢失依然会被暴露。
+        """
+        import time
+        deadline = time.time() + timeout
+        last_texts = []
+        while True:
+            last_texts = [el.text for el in
+                          self.driver.find_elements(By.CSS_SELECTOR, ".comment-item")]
+            if any(text in t for t in last_texts):
                 return
-        assert False, f"评论区未找到含'{text}'的评论"
+            if time.time() >= deadline:
+                break
+            time.sleep(0.2)
+        assert False, (
+            f"评论区在{timeout}秒内未出现含'{text}'的评论"
+            f"（当前可见评论{len(last_texts)}条）")
 
     def assert_article_info_complete(self):
         """断言文章详情页信息完整(标题、内容、作者、浏览量)"""

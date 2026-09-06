@@ -240,11 +240,21 @@ class TestComment:
             comment.input_reply(reply_text)
             comment.submit_reply()
             comment.wait_for_page_ready()
-            nested_bodies = comment.get_nested_comment_bodies(0)
-            assert any(reply_text in b for b in nested_bodies), \
-                f"回复'{reply_text}'应作为第1条评论的子评论显示，实际子评论={nested_bodies}"
-            assert comment.get_nested_comment_count() == parent_before + 1, \
-                "回复提交后嵌套子评论数应+1"
+            # 子评论随列表异步刷新渲染，轮询等待出现（与 assert_comment_exists 同竞态根因）
+            import time as _time
+            _deadline = _time.time() + 5
+            nested_bodies = []
+            while True:
+                nested_bodies = comment.get_nested_comment_bodies(0)
+                if any(reply_text in b for b in nested_bodies):
+                    break
+                if _time.time() >= _deadline:
+                    break
+                _time.sleep(0.2)
+            assert any(reply_text in b for b in nested_bodies), (
+                f"回复'{reply_text}'应作为第1条评论的子评论显示，实际子评论={nested_bodies}")
+            assert comment.get_nested_comment_count() == parent_before + 1, (
+                "回复提交后嵌套子评论数应+1")
             return
 
         # 已登录操作
