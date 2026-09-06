@@ -65,7 +65,6 @@ class TestArticleDetail:
                 assert v2 == v1 + 1, f"浏览量应增加1，访问前={v1}，访问后={v2}"
             finally:
                 conn.close()
-            auto_assert(page, driver, case.expected)
             return
 
         # FC-WZXQ-005: 再次进入同一篇文章浏览量继续增加
@@ -93,7 +92,6 @@ class TestArticleDetail:
                 assert v2 == v1 + 1, f"浏览量应继续增加1，访问前={v1}，访问后={v2}"
             finally:
                 conn.close()
-            auto_assert(page, driver, case.expected)
             return
 
         page.open_url(case.resolved_path())

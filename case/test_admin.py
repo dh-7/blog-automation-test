@@ -7,6 +7,7 @@ from page.page_admin_article_manage import PageAdminArticleManage
 from page.page_admin_comment_manage import PageAdminCommentManage
 from page.page_admin_user_manage import PageAdminUserManage
 from page.page_login import PageLogin
+from utils import db_query
 from utils.assert_helpers import auto_assert
 from utils.paths import UI_DATASOURCE as DATASOURCE
 import allure
@@ -53,6 +54,18 @@ class TestAdmin:
             }
             page = page_map[case_id](driver)
             page.login_and_open(u, p, url)
+            # FC-HTGL-001: 仪表盘应显示三项统计且均为非负数字
+            if case_id == 'FC-HTGL-001':
+                nums = [e.text for e in driver.find_elements(By.CSS_SELECTOR, ".stat-number")]
+                labels = [e.text for e in driver.find_elements(By.CSS_SELECTOR, ".stat-label")]
+                assert len(nums) >= 3, f"仪表盘应显示三项统计，实际={len(nums)}项"
+                import re
+                for label, num in zip(labels, nums):
+                    assert re.search(r"\d+", num), f"统计项'{label}'应为数字，实际='{num}'"
+                assert any("文章" in l for l in labels), "统计应包含文章数"
+                assert any("用户" in l for l in labels), "统计应包含用户数"
+                assert any("评论" in l for l in labels), "统计应包含评论数"
+                return
             # FC-HTGL-002: 用户管理表格验证（el-table中的列标题）
             if case_id == 'FC-HTGL-002':
                 from selenium.webdriver.support.wait import WebDriverWait
@@ -86,8 +99,23 @@ class TestAdmin:
                 for keyword in ['评论', '文章', '评论用户', '时间']:
                     assert any(keyword in ht for ht in header_texts), \
                         f"表格应包含'{keyword}'相关列，实际列头={header_texts}"
+                # 表格行随 API 异步渲染，轮询等待
+                from selenium.webdriver.support.ui import WebDriverWait
+                try:
+                    WebDriverWait(driver, 8).until(
+                        lambda d: len(d.find_elements(
+                            By.CSS_SELECTOR, '.el-table__body-wrapper tr')) > 0)
+                except Exception:
+                    pass
                 rows = driver.find_elements(By.CSS_SELECTOR, '.el-table__body-wrapper tr')
                 assert len(rows) > 0, "评论表格应至少有一行数据"
+                return
+            # FC-HTGL-003: 后台文章列表应包含草稿文章（与 DB 草稿清单交叉验证）
+            if case_id == 'FC-HTGL-003':
+                drafts = db_query.draft_titles()
+                assert drafts, "前置数据缺失：DB 中无草稿文章，无法验证'含草稿'"
+                found_any = page.search_article(drafts[0])
+                assert found_any, f"后台文章列表应包含草稿文章'{drafts[0]}'（含草稿）"
                 return
             auto_assert(page, driver, case.expected)
             return
@@ -125,6 +153,14 @@ class TestAdmin:
             try:
                 if target_user:
                     login_page = PageLogin(driver)
+                    # 旧密码应失效
+                    login_page.open_url()
+                    login_page.input_username(target_user)
+                    login_page.input_password('123456')
+                    login_page.click_login_button()
+                    login_page.wait_for_page_ready()
+                    assert '/login' in driver.current_url,                         "重置密码后旧密码不应能登录成功"
+                    # 新密码应可登录
                     login_page.login_and_navigate(target_user, 'testpass123', url)
             finally:
                 page.login_and_open(u, p, url)
@@ -152,6 +188,12 @@ class TestAdmin:
                 page.clear_search_and_refresh()
             titles_after = page.get_all_article_titles()
             assert target_title not in titles_after, f"文章'{target_title}'应已从列表消失"
+            # DB 回查：关联评论/收藏/阅读历史一并清理
+            aid = db_query.scalar("SELECT id FROM article WHERE title=%s", (target_title,))
+            if aid:
+                assert db_query.article_field(aid, 'deleted') == 1, "文章应已软删除"
+                bad = db_query.article_cascade_cleaned(aid)
+                assert not bad, f"关联数据未清理: {bad}"
             return
 
         # ---- FC-HTGL-009: 管理员删除任意评论成功 ----
@@ -173,14 +215,20 @@ class TestAdmin:
         if case_id == 'FC-HTGL-010':
             page = PageAdminDashboard(driver)
             page.login_and_open(u, p, url)
+            from selenium.webdriver.support.ui import WebDriverWait
+            def _url_has(part):
+                return lambda d: part in d.current_url
             page.click_manage_articles()       # 跳转到 /admin/articles
+            assert WebDriverWait(driver, 8).until(_url_has("/admin/articles")),                 f"管理员应可访问文章管理，实际URL={driver.current_url}"
             page.open_url()                    # 返回 /admin
             page.click_manage_users()          # 跳转到 /admin/users
+            assert WebDriverWait(driver, 8).until(_url_has("/admin/users")),                 f"管理员应可访问用户管理，实际URL={driver.current_url}"
             page.open_url()                    # 返回 /admin
             page.click_manage_comments()       # 跳转到 /admin/comments
+            assert WebDriverWait(driver, 8).until(_url_has("/admin/comments")),                 f"管理员应可访问评论管理，实际URL={driver.current_url}"
             page.open_url()                    # 返回 /admin
             page.click_menu_dashboard()        # 回到仪表盘
-            auto_assert(page, driver, case.expected)
+            assert '/admin' in driver.current_url,                 f"应回到仪表盘，实际URL={driver.current_url}"
             return
 
         # ---- FC-HTGL-011/012: 权限测试 ----
@@ -193,15 +241,8 @@ class TestAdmin:
                 page.login_and_open(target_u, target_p, url)
                 # 普通用户访问后台应被重定向到登录页或首页
                 current_url = driver.current_url
-                is_redirected = '/login' in current_url or '/admin' not in current_url
-                # 或页面不含后台管理元素
-                admin_els = driver.find_elements(By.CSS_SELECTOR, '.el-menu, .admin-layout')
-                if not is_redirected and admin_els:
-                    # 如果仍在admin页面，检查是否有权限相关内容
-                    source = driver.page_source
-                    assert '无权' in source or '无权限' in source or \
-                           '/login' in current_url, \
-                        f"普通用户应无法访问后台，实际URL={current_url}"
+                # 无条件断言：要么被重定向离开后台，要么页面明确提示无权限
+                assert '/admin' not in current_url or '无权' in driver.page_source,                     f"普通用户应无法访问后台，实际URL={current_url}"
                 return
             else:
                 page = PageAdminDashboard(driver)

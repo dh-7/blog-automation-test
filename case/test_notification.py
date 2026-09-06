@@ -1,11 +1,11 @@
 """通知模块 UI 测试 — 数据驱动"""
 import os, sys, pytest
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from base.data_loader import UiDataLoader
 from page.page_login import PageLogin
 from page.page_notification import PageNotification
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
+from utils import db_query
 from utils.assert_helpers import auto_assert
 from utils.paths import UI_DATASOURCE as DATASOURCE
 import allure
@@ -15,6 +15,17 @@ _cases = _loader.load_functional_cases(module="通知")
 _loader.close()
 _params = [(c.case_id, c) for c in _cases]
 _ids = [c.case_id for c in _cases]
+
+
+def _db_unread(username):
+    """当前用户未读通知数（DB 口径）"""
+    return db_query.unread_notification_count(username)
+
+
+def _badge_int(text):
+    import re
+    m = re.search(r"\d+", str(text))
+    return int(m.group()) if m else 0
 
 
 @allure.epic("UI自动化测试")
@@ -37,8 +48,6 @@ class TestNotification:
             home = PageHome(self.driver)
             home.open_url()
             home.wait_for_page_ready()
-            # 等待页面元素渲染完成（替代 sleep）
-            from selenium.webdriver.support import expected_conditions as EC
             # 等待通知铃铛出现（正向），或等待登录按钮出现确认未登录（负向）。
             # 注意：不能用 contains(text(),"登录")——text() 节点集在 contains() 中匹配不到，
             # 实际验证过必须用 href 定位器或 contains(.,"登录")。
@@ -71,13 +80,70 @@ class TestNotification:
         notif.open_url(case.resolved_path())
         notif.wait_for_page_ready()
 
-        # 点击某条通知标记已读（FC-TZ-005）
-        if "标记已读" in case.title or "已读未读" in case.expected:
-            if notif.get_notification_count() > 0:
-                notif.click_notification(0)
-                notif.wait_for_page_ready()
-                # 精确断言: 点击后通知应变为已读状态
-                # (auto_assert 路径6 会检查无错误状态)
+        # FC-TZ-001: 通知列表显示完整通知信息（内容/时间/头像逐项结构校验）
+        if case_id == 'FC-TZ-001':
+            items = self.driver.find_elements(By.CSS_SELECTOR, ".notification-item")
+            assert len(items) > 0, \
+                "通知列表应有通知（前置数据：FC-PL-007/YW-PLHD-004 已产生通知）"
+            for i, item in enumerate(items[:5]):
+                content = item.find_elements(By.CSS_SELECTOR, ".notification-content")
+                assert content and content[0].text.strip(), f"通知{i}缺内容"
+                assert item.find_elements(By.CSS_SELECTOR, ".notification-time"), \
+                    f"通知{i}缺时间"
+                assert item.find_elements(By.CSS_SELECTOR, "img, .el-avatar"), \
+                    f"通知{i}缺发送人头像"
+            return
+
+        # FC-TZ-002: 导航栏显示未读通知数量角标
+        if case_id == 'FC-TZ-002':
+            db_unread = _db_unread(user)
+            assert db_unread > 0, \
+                f"前置数据缺失：{user} 应有未读通知（DB未读数={db_unread}）"
+            badges = self.driver.find_elements(
+                By.CSS_SELECTOR, '.notification-bell .el-badge__content')
+            assert badges, "有未读通知时导航栏应显示未读角标"
+            assert _badge_int(badges[0].text) == db_unread, \
+                f"角标数字({badges[0].text})应等于DB未读数({db_unread})"
+            return
+
+        # FC-TZ-003: 有新通知时未读数角标显示正确的数字
+        if case_id == 'FC-TZ-003':
+            db_unread = _db_unread(user)
+            assert db_unread > 0, \
+                f"前置数据缺失：{user} 应有未读通知（DB未读数={db_unread}）"
+            badges = self.driver.find_elements(
+                By.CSS_SELECTOR, '.notification-bell .el-badge__content')
+            assert badges, "有未读通知时应显示角标"
+            assert _badge_int(badges[0].text) == db_unread, \
+                f"角标数字({badges[0].text})与实际未读数({db_unread})不一致"
+            return
+
+        # FC-TZ-004: 通知列表按时间从新到旧排列（UI 顺序与 DB 时间倒序一致）
+        if case_id == 'FC-TZ-004':
+            items = self.driver.find_elements(By.CSS_SELECTOR, ".notification-item")
+            n = min(5, len(items))
+            assert n >= 2, "至少需要2条通知才能验证排序"
+            expected = db_query.notifications_ordered_desc(user, n)
+            for i in range(n):
+                ui_text = items[i].text
+                db_content = expected[i][1]
+                assert db_content in ui_text, \
+                    f"通知第{i+1}条应是最新的'{db_content}'，实际UI显示: '{ui_text[:50]}'"
+            return
+
+        # 点击某条通知标记已读（FC-TZ-005）— 精确验证未读数-1
+        if case_id == 'FC-TZ-005':
+            unread_before = _db_unread(user)
+            assert unread_before > 0, \
+                f"前置数据缺失：{user} 应有未读通知（DB未读数={unread_before}）"
+            assert notif.click_first_unread(), "通知列表中应存在带未读蓝点的通知"
+            notif.wait_for_page_ready()
+
+            def _unread_changed(d):
+                return _db_unread(user) == unread_before - 1
+            assert WebDriverWait(self.driver, 5).until(_unread_changed), \
+                f"点击通知后未读数应-1（{unread_before}→{unread_before-1}）"
+            return
 
         # 全部已读（FC-TZ-006）
         if "全部已读" in case.title and "不可用" not in case.title:
@@ -93,10 +159,18 @@ class TestNotification:
                 )
             assert WebDriverWait(self.driver, 5).until(lambda d: _unread_zero(d)), \
                 "全部已读后未读数应归0"
+            # 精确回查：DB 中该用户全部通知均已读
+            assert _db_unread(user) == 0, "全部已读后 DB 中不应再有未读通知"
+            return
 
         # 无未读消息时全部已读按钮不可用（FC-TZ-011）
         if "全部已读" in case.title and "不可用" in case.title:
-            items = self.driver.find_elements(By.CSS_SELECTOR, ".notification-item")
+            # 自给自足：若仍有未读，先全部已读，再验证按钮不可用
+            if _db_unread(user) > 0:
+                notif.click_mark_all_read()
+                notif.wait_for_page_ready()
+            assert _db_unread(user) == 0, (
+                f"前置数据缺失：本用例要求无未读消息（DB未读数={_db_unread(user)}）")
             btns = self.driver.find_elements(By.XPATH,
                 '//div[contains(@class,"notification-actions")]//button[contains(.,"全部已读")]')
             if len(btns) == 0:
@@ -104,6 +178,7 @@ class TestNotification:
             else:
                 is_disabled = not btns[0].is_enabled() or "is-disabled" in btns[0].get_attribute("class")
                 assert is_disabled, "无未读消息时全部已读按钮应置灰或隐藏"
+            return
 
         # 删除单条（FC-TZ-007）
         if "删除单条" in case.title and notif.get_notification_count() > 0:
@@ -141,6 +216,54 @@ class TestNotification:
             assert not self.driver.find_elements(
                 By.CSS_SELECTOR, ".notification-panel .notification-item"), \
                 "清空后通知面板不应再有任何通知项"
+            return
+
+        # FC-TZ-010: 通知类型包括评论通知和回复通知（自造两类通知后验证）
+        if case_id == 'FC-TZ-010':
+            # 本模块 TZ-008 已清空通知，这里自造两类通知（接收人=zhangsan）
+            from page.page_article_detail import PageArticleDetail
+            from page.page_comment import PageComment
+            from case.conftest import login as _login
+            _login(self.driver, 'lisi', '123456')
+            detail0 = PageArticleDetail(self.driver)
+            # ① 评论 zhangsan 的文章3 -> comment 通知
+            detail0.open_url('/article/3')
+            detail0.wait_for_page_ready()
+            c0 = PageComment(self.driver)
+            c0.input_comment('自动化-TZ010验证-评论类型')
+            c0.click_submit()
+            c0.wait_for_page_ready()
+            # ② 回复 zhangsan 在文章1的评论 -> reply 通知
+            #    （评论列表按最新在前排序，必须定位到 zhangsan 的评论，不能盲取第0条）
+            detail0.open_url('/article/1')
+            detail0.wait_for_page_ready()
+            c0 = PageComment(self.driver)
+            zs_nick = db_query.scalar(
+                "SELECT nickname FROM user WHERE username='zhangsan'")
+            authors = c0.get_comment_authors()
+            assert zs_nick in authors, "文章1应有 zhangsan 的评论可回复"
+            reply_idx = authors.index(zs_nick)
+            c0.click_reply(reply_idx)
+            c0.input_reply('自动化-TZ010验证-回复类型')
+            c0.submit_reply()
+            c0.wait_for_page_ready()
+            # ③ 切回 zhangsan 验证两类通知（断言失败也要恢复无未读，供 TZ-011 使用）
+            _login(self.driver, 'zhangsan', '123456')
+            notif.open_url(case.resolved_path())
+            notif.wait_for_page_ready()
+            try:
+                assert db_query.has_notification_type('zhangsan', 'comment'), (
+                    "zhangsan 的通知中应存在 comment（评论）类型通知")
+                assert db_query.has_notification_type('zhangsan', 'reply'), (
+                    "zhangsan 的通知中应存在 reply（回复）类型通知")
+                items = self.driver.find_elements(By.CSS_SELECTOR, ".notification-item")
+                texts = [it.text for it in items]
+                assert any("回复" in t for t in texts), "通知列表中应能区分出回复类通知"
+                assert any("评论" in t for t in texts), "通知列表中应能区分出评论类通知"
+            finally:
+                # ④ 恢复无未读状态（后续 TZ-011 依赖）
+                notif.click_mark_all_read()
+                notif.wait_for_page_ready()
             return
 
         auto_assert(notif, self.driver, case.expected)

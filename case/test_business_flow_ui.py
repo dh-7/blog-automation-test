@@ -16,7 +16,9 @@ from page.page_admin_article_manage import PageAdminArticleManage
 from page.page_admin_comment_manage import PageAdminCommentManage
 from page.page_admin_user_manage import PageAdminUserManage
 from page.page_publish_article import PagePublishArticle
+from utils import db_query
 from utils.assert_helpers import auto_assert, assert_url, assert_toast
+from page.page_author import PageAuthor
 from utils.config import Config
 from utils.paths import UI_DATASOURCE as DATASOURCE
 from case.conftest import login
@@ -52,6 +54,35 @@ def _get_username_by_nickname(nickname):
         return row[0] if row else nickname
     finally:
         conn.close()
+
+
+def _wait_url(driver, part, timeout=8):
+    """轮询等待当前 URL 包含 part（路由异步跳转防护）"""
+    import time as _t
+    deadline = _t.time() + timeout
+    while _t.time() < deadline:
+        if part in driver.current_url:
+            return True
+        _t.sleep(0.3)
+    return False
+
+
+def _publish_disposable(driver, u, p, title):
+    """发布一篇一次性文章（供删除类用例隔离破坏范围，避免误删种子数据）
+
+    轮询确认文章已入库（发布后写库有短暂延迟），返回文章ID。
+    """
+    _publish_article(driver, u, p, title, "一次性测试文章内容，删除用例专用")
+    import time as _t
+    aid = None
+    for _ in range(12):
+        aid = db_query.article_id_by_title(title)
+        if aid:
+            return aid
+        _t.sleep(0.5)
+    toasts = [t.text for t in driver.find_elements(By.CSS_SELECTOR, ".el-message")]
+    raise AssertionError(
+        f"一次性文章'{title}'发布后未入库（URL={driver.current_url}, toasts={toasts}）")
 
 
 def _publish_article(driver, u, p, title, content, category_name=None, tag_names=None, summary=None):
@@ -114,6 +145,8 @@ class TestAuthorPublishFlow:
         home = PageHome(self.driver)
         home.open_url()
         home.wait_for_page_ready()
+        titles = home.get_all_article_titles()
+        assert any(c.field("标题") in t for t in titles),             f"发布成功后新文章'{c.field('标题')}'应出现在列表中"
         assert home.get_article_count() > 0
 
     def test_save_draft_flow(self):
@@ -125,6 +158,14 @@ class TestAuthorPublishFlow:
             c.field("标题"), c.field("内容"),
         )
         assert "/write" not in self.driver.current_url
+        # DB 回查：状态为草稿；公开列表不可见
+        aid = db_query.article_id_by_title(c.field("标题"))
+        assert aid, "草稿文章应已入库"
+        assert db_query.article_field(aid, "status") == 0, "草稿状态应为0"
+        home = PageHome(self.driver)
+        home.open_url()
+        home.wait_for_page_ready()
+        assert c.field("标题") not in home.get_all_article_titles(),             "草稿不应出现在公开列表"
 
     def test_edit_after_publish_flow(self):
         """YW-FBWZ-003: 发布后修改流程"""
@@ -137,6 +178,8 @@ class TestAuthorPublishFlow:
         home = PageHome(self.driver)
         home.open_url()
         home.wait_for_page_ready()
+        titles = home.get_all_article_titles()
+        assert any(c.field("新标题") in t for t in titles),             f"修改后的标题'{c.field('新标题')}'应在列表中可见"
         assert home.get_article_count() > 0
 
     def test_empty_title_fail_flow(self):
@@ -148,6 +191,17 @@ class TestAuthorPublishFlow:
             "", c.field("内容"),
         )
         assert "/write" in self.driver.current_url
+        from page.page_publish_article import PagePublishArticle
+        pub = PagePublishArticle(self.driver)
+        import time as _t
+        err = None
+        for _ in range(16):
+            errs = self.driver.find_elements(By.CSS_SELECTOR, ".el-form-item__error")
+            if any("标题" in e.text for e in errs):
+                err = errs[0]
+                break
+            _t.sleep(0.5)
+        assert err, "标题为空发布应提示'请输入标题'"
 
     def test_empty_content_fail_flow(self):
         """YW-FBWZ-005: 内容为空发布失败"""
@@ -158,6 +212,17 @@ class TestAuthorPublishFlow:
             c.field("标题"), "",
         )
         assert "/write" in self.driver.current_url
+        from page.page_publish_article import PagePublishArticle
+        pub = PagePublishArticle(self.driver)
+        import time as _t
+        err = None
+        for _ in range(16):
+            errs = self.driver.find_elements(By.CSS_SELECTOR, ".el-form-item__error")
+            if any("内容" in e.text for e in errs):
+                err = errs[0]
+                break
+            _t.sleep(0.5)
+        assert err, "内容为空发布应提示'请输入内容'"
 
 
 # ============================================================
@@ -207,12 +272,30 @@ class TestReaderBrowseFavoriteFlow:
         home.wait_for_page_ready()
         home.search(c.field("关键词").split("（")[0])  # 取"Java"部分
         home.wait_for_loading_finish()
-        if home.get_article_count() > 0:
-            home.click_article_by_index(0)
-            home.wait_for_page_ready()
-            detail = PageArticleDetail(self.driver)
-            detail.click_favorite()
-            detail.wait_for_page_ready()
+        assert home.get_article_count() > 0, "搜索应有结果"
+        home.click_article_by_index(0)
+        home.wait_for_page_ready()
+        import re
+        detail = PageArticleDetail(self.driver)
+        m = re.search(r"/article/(\d+)", self.driver.current_url)
+        assert m, "应进入文章详情页"
+        aid = int(m.group(1))
+        cnt_before = detail.get_favorite_count()
+        db_before = db_query.favorite_row(c.login_user, aid)
+        detail.click_favorite()
+        detail.wait_for_page_ready()
+        assert db_query.favorite_row(c.login_user, aid) and not db_before,             "收藏应写入 DB（操作前无记录，操作后有）"
+        import re as _re
+        def _num(t):
+            m2 = _re.search(r"\d+", str(t))
+            return int(m2.group()) if m2 else 0
+        assert _num(detail.get_favorite_count()) == _num(cnt_before) + 1,             f"收藏数应+1: {cnt_before} -> {detail.get_favorite_count()}"
+        # 我的收藏列表中可见
+        fav = PageFavorite(self.driver)
+        fav.open_url()
+        fav.wait_for_page_ready()
+        fav_titles = fav.get_article_titles()
+        assert fav_titles, "收藏后我的收藏列表不应为空"
 
     def test_related_article_flow(self):
         """YW-LLSC-002: 相关文章跳转"""
@@ -223,9 +306,12 @@ class TestReaderBrowseFavoriteFlow:
         detail.open_url(f"/article/{c.field('文章ID', '1')}")
         detail.wait_for_page_ready()
         related = detail.get_related_articles()
-        if related:
-            detail.click_related_article(0)
-            detail.wait_for_page_ready()
+        assert related, "文章1应有相关文章推荐"
+        before_url = self.driver.current_url
+        detail.click_related_article(0)
+        detail.wait_for_page_ready()
+        assert self.driver.current_url != before_url,             "点击相关文章应跳转到另一篇文章"
+        assert "/article/" in self.driver.current_url
 
     def test_category_tag_filter_flow(self):
         """YW-LLSC-003: 分类+标签筛选"""
@@ -256,7 +342,7 @@ class TestReaderBrowseFavoriteFlow:
         home = PageHome(self.driver)
         home.open_url()
         home.wait_for_page_ready()
-        assert home.get_article_count() >= 0
+        assert home.get_article_count() > 0, "未登录访客应能浏览文章列表"
 
     def test_search_empty_result_flow(self):
         """YW-LLSC-006: 搜索无结果"""
@@ -266,7 +352,16 @@ class TestReaderBrowseFavoriteFlow:
         home.open_url()
         home.wait_for_page_ready()
         home.search(c.field("关键词"))
-        home.wait_for_loading_finish()
+        home.wait_for_page_ready()
+        # 结果异步刷新，轮询等待列表清空（最多5秒）
+        import time
+        cards = self.driver.find_elements(By.CSS_SELECTOR, ".article-card")
+        for _ in range(10):
+            if len(cards) == 0:
+                break
+            time.sleep(0.5)
+            cards = self.driver.find_elements(By.CSS_SELECTOR, ".article-card")
+        assert len(cards) == 0,             f"搜索不存在的关键词应显示空列表，实际={len(cards)}条"
 
 
 # ============================================================
@@ -302,6 +397,8 @@ class TestReaderCommentNotifyFlow:
         notif = PageNotification(self.driver)
         notif.open_url()
         assert notif.get_notification_count() > 0, "评论后应触发作者通知，但通知列表为空"
+        latest = db_query.latest_notification("admin")
+        assert latest and latest[0] == "comment",             f"最新通知类型应为 comment，实际={latest}"
 
     def test_reply_triggers_notification_flow(self):
         """YW-PLHD-002: 回复评论并触发被回复人通知"""
@@ -325,10 +422,10 @@ class TestReaderCommentNotifyFlow:
                 reply_idx = i
                 break
         assert reply_to_user is not None, "应存在一条非当前用户的评论才能进行回复测试"
-        # 回复该评论
+        # 回复该评论（必须点回复表单内的提交按钮，回复才真正提交）
         comment.click_reply(reply_idx)
         comment.input_reply(c.field("回复内容"))
-        comment.click_submit()
+        comment.submit_reply()
         comment.wait_for_page_ready()
         # 切换到被回复人账号验证通知
         reply_to_login_user = _get_username_by_nickname(reply_to_user)
@@ -345,13 +442,22 @@ class TestReaderCommentNotifyFlow:
         home = PageHome(self.driver)
         home.open_url()
         home.wait_for_page_ready()
-        if home.get_article_count() > 0:
-            home.click_article_by_index(0)
-            home.wait_for_page_ready()
+        aid = int(c.field("文章ID"))
+        detail0 = PageArticleDetail(self.driver)
+        detail0.open_url(f"/article/{aid}")
+        detail0.wait_for_page_ready()
+        if detail0.is_comment_section_visible():
+            cnt_before = db_query.comment_count(aid)
+            unread_before = db_query.unread_notification_count(c.login_user)
             comment = PageComment(self.driver)
             comment.input_comment("自己评论自己")
             comment.click_submit()
             comment.wait_for_page_ready()
+            # 评论应提交成功（DB 评论数+1）
+            assert db_query.comment_count(aid) == cnt_before + 1,                 "自己评论自己时评论应提交成功"
+            # 不产生通知（DB 未读数不变）
+            unread_after = db_query.unread_notification_count(c.login_user)
+            assert unread_after == unread_before,                 f"自己评论自己不应产生通知: 未读数 {unread_before}->{unread_after}"
 
     def test_mark_all_read_flow(self):
         """YW-PLHD-004: 全部已读"""
@@ -375,6 +481,8 @@ class TestReaderCommentNotifyFlow:
         notif.wait_for_page_ready()
         notif.click_mark_all_read()
         notif.wait_for_page_ready()
+        # 精确回查：未读数归0
+        assert db_query.unread_notification_count(c.login_user) == 0,             "全部已读后未读数应归0"
 
     def test_empty_comment_fail_flow(self):
         """YW-PLHD-005: 空评论失败"""
@@ -454,26 +562,60 @@ class TestHistoryFlow:
         history = PageHistory(self.driver)
         history.open_url()
         history.wait_for_page_ready()
-        count = history.get_history_count()
-        if count > 0:
-            history.click_delete(0)
-            history.wait_for_page_ready()
+        # 记录：浏览完成后历史应非空
+        count_before = history.get_history_count()
+        assert count_before > 0, "浏览文章后阅读历史应非空"
+        # 删除第一条
+        history.click_delete(0)
+        history.wait_for_page_ready()
+        try:
+            history.wait_for_confirm_dialog(timeout=3)
+            history.confirm_dialog()
+        except Exception:
+            pass
+        history.wait_for_page_ready()
+        count_mid = history.get_history_count()
+        assert count_mid == count_before - 1,             f"删除单条后历史应-1: {count_before}->{count_mid}"
+        # 清空
         history.click_clear_all()
         history.wait_for_page_ready()
+        from selenium.webdriver.support.ui import WebDriverWait
+        WebDriverWait(self.driver, 5).until(
+            lambda d: len(self.driver.find_elements(By.CSS_SELECTOR, ".article-item")) == 0
+            or len(self.driver.find_elements(By.CSS_SELECTOR, ".empty-state")) > 0
+        )
+        empty_now = len(self.driver.find_elements(By.CSS_SELECTOR, ".article-item")) == 0
+        assert empty_now, "清空后阅读历史应为空"
 
     def test_reread_time_update_flow(self):
         """YW-YDLS-002: 重复浏览时间更新"""
         c = _c("YW-YDLS-002")
         login(self.driver, c.login_user, c.login_password)
+        import time
+        aid = int(c.field('之前浏览过的文章ID', '1'))
         detail = PageArticleDetail(self.driver)
-        # detail.open_url(c.field("之前浏览过的文章ID", "1"))
-        detail.open_url(f"/article/{c.field('之前浏览过的文章ID', '1')}")
+        detail.open_url(f"/article/{aid}")
         detail.wait_for_page_ready()
+        t1 = db_query.read_time(c.login_user, aid)
+        assert t1 is not None, "浏览后应记录阅读历史"
+        time.sleep(1.1)  # 秒级时间戳，保证可区分
+        detail.open_url(f"/article/{aid}")
+        detail.wait_for_page_ready()
+        t2 = db_query.read_time(c.login_user, aid)
+        assert t2 is not None and t2 > t1,             f"重复浏览后阅读时间应更新: {t1} -> {t2}"
 
     def test_not_login_no_history_flow(self):
         """YW-YDLS-003: 未登录不记录历史"""
         c = _c("YW-YDLS-003")
+        before_total = db_query.scalar("SELECT COUNT(*) FROM read_history")
+        # 未登录浏览文章
         self.driver.delete_all_cookies()
+        detail = PageArticleDetail(self.driver)
+        detail.open_url("/article/1")
+        detail.wait_for_page_ready()
+        after_total = db_query.scalar("SELECT COUNT(*) FROM read_history")
+        assert after_total == before_total,             f"未登录浏览不应记录阅读历史: 全表 {before_total}->{after_total}"
+        # 历史页仍应要求登录
         history = PageHistory(self.driver)
         history.open_url()
         history.wait_for_page_ready()
@@ -529,6 +671,16 @@ class TestUserInfoFlow:
         personal.fill_bio(c.field("新简介"))
         personal.click_save()
         personal.wait_for_page_ready()
+        # 保存应有成功提示，且重新加载后字段回显所填值
+        toast = personal.wait_for_toast("成功", timeout=3)
+        assert toast, "保存个人信息应提示成功"
+        personal.open_url()
+        personal.wait_for_page_ready()
+        personal.click_settings()
+        personal.wait_for_page_ready()
+        from selenium.webdriver.common.by import By
+        nick_val = self.driver.find_element(By.CSS_SELECTOR, 'input[placeholder="请输入昵称"]').get_attribute("value")
+        assert nick_val == c.field("新昵称"),             f"重新加载后昵称应回显新值: '{nick_val}' != '{c.field('新昵称')}'"
 
     def test_change_password_flow(self):
         """YW-GRXX-002: 修改密码成功并验证新旧密码完整流程"""
@@ -568,6 +720,9 @@ class TestUserInfoFlow:
         c = _c("YW-GRXX-003")
         wrong_pwd = c.field("原密码", "wrongpass").split("（")[0]
         new_pwd = c.field("新密码", "newpass456")
+        from utils import db_query as _dbq
+        _pwd_hash_before = _dbq.scalar("SELECT password FROM user WHERE username=%s",
+                                       (c.login_user,))
         login(self.driver, c.login_user, c.login_password)
         personal = PagePersonal(self.driver)
         personal.open_url('/profile/settings')
@@ -578,14 +733,13 @@ class TestUserInfoFlow:
         personal.fill_new_password(new_pwd)
         personal.fill_confirm_password(new_pwd)
         personal.click_change_password()
-        personal.wait_for_page_ready()
-        # 验证提示原密码错误
-        toast = personal.wait_for_toast("密码", timeout=5)
-        if not toast:
-            toast = personal.wait_for_toast("错误", timeout=3)
-        if not toast:
-            toast = personal.wait_for_toast("失败", timeout=3)
+        # 立即捕获 toast（3 秒即逝，不能先 wait_for_page_ready）
+        toast = personal.quick_wait_toast("原密码", timeout=6, interval=0.2)
+        assert toast, "原密码错误应有错误提示（toast 含'原密码'）"
         assert "/settings" in self.driver.current_url, "原密码错误应留在设置页"
+        # DB 回查：密码未变更
+        assert _dbq.scalar("SELECT COUNT(*) FROM user WHERE username=%s AND password=%s",
+                           (c.login_user, _pwd_hash_before)) == 1,             "原密码错误时密码不应被修改"
 
     def test_empty_new_password_flow(self):
         """YW-GRXX-004: 新密码为空失败"""
@@ -604,6 +758,7 @@ class TestUserInfoFlow:
         toast = personal.wait_for_toast("填写", timeout=5)
         if not toast:
             toast = personal.wait_for_toast("密码", timeout=3)
+        assert toast, "新密码为空应有校验提示"
         assert "/settings" in self.driver.current_url, "新密码为空应留在设置页"
 
     def test_not_login_redirect_flow(self):
@@ -633,12 +788,17 @@ class TestAdminManageUserFlow:
         c = _c("YW-GLY-001")
         user_page = PageAdminUserManage(self.driver)
         user_page.login_and_open(c.login_user, c.login_password)
-        if user_page.get_row_count() > 1:
-            user_page.click_edit_by_index(1)
-            user_page.wait_for_edit_dialog(timeout=5)
-            user_page.input_edit_nickname(c.field("新昵称"))
-            user_page.click_edit_save()
-            user_page.wait_for_loading_finish()
+        uid = user_page._extract_id(c.field("目标用户ID", "2（zhangsan）"))
+        new_nick = c.field("新昵称")
+        new_email = c.field("新邮箱")
+        orig_nick, orig_email = user_page.edit_user_by_id(uid, new_nick, new_email)
+        try:
+            assert user_page.get_nickname_by_id(uid) == new_nick,                 f"昵称应更新为'{new_nick}'"
+            assert user_page.get_email_by_id(uid) == new_email,                 f"邮箱应更新为'{new_email}'"
+        finally:
+            # 恢复原昵称/邮箱，避免污染后续用例（昵称被通知/评论断言依赖）
+            user_page.login_and_open(c.login_user, c.login_password)
+            user_page.restore_user_by_id(uid, orig_nick, orig_email)
 
     def test_admin_change_role_flow(self):
         """YW-GLY-002: 管理员修改用户角色"""
@@ -700,35 +860,56 @@ class TestAdminManageArticleCommentFlow:
     def test_admin_search_delete_article_flow(self):
         """YW-GLWZ-001: 搜索删除文章"""
         c = _c("YW-GLWZ-001")
+        # 自造一次性文章作为删除目标（避免误删种子文章，污染后续用例）
+        target_title = "一次性-GLWZ001-待删除文章"
+        target_aid = _publish_disposable(self.driver, c.login_user, c.login_password, target_title)
         article_page = PageAdminArticleManage(self.driver)
         article_page.login_and_open(c.login_user, c.login_password)
-        article_page.input_search(c.field("搜索关键词").split("（")[0])
+        article_page.input_search(target_title)
         article_page.click_search()
         article_page.wait_for_loading_finish()
-        if article_page.get_row_count() > 0:
-            article_page.click_delete_by_index(0)
-            article_page.wait_for_confirm_dialog()
-            article_page.confirm_delete()
-            article_page.wait_for_loading_finish()
+        assert article_page.get_row_count() > 0, f"后台应能搜索到'{target_title}'"
+        article_page.click_delete_by_index(0)
+        article_page.wait_for_confirm_dialog()
+        article_page.confirm_delete()
+        article_page.wait_for_loading_finish()
+        import time as _t
+        deleted = False
+        for _ in range(10):
+            if db_query.article_field(target_aid, "deleted") == 1:
+                deleted = True
+                break
+            _t.sleep(0.5)
+        assert deleted, "删除后文章应软删除"
+        bad = db_query.article_cascade_cleaned(target_aid)
+        assert not bad, f"关联数据未清理: {bad}"
 
     def test_admin_delete_comment_flow(self):
         """YW-GLWZ-002: 删除评论"""
         c = _c("YW-GLWZ-002")
         comment_page = PageAdminCommentManage(self.driver)
         comment_page.login_and_open(c.login_user, c.login_password)
-        if comment_page.get_row_count() > 0:
-            comment_page.click_delete_by_index(0)
-            comment_page.wait_for_confirm_dialog()
-            comment_page.confirm_delete()
-            comment_page.wait_for_loading_finish()
+        total_before = db_query.comment_count()
+        assert total_before > 0, "后台评论列表应有数据"
+        comment_page.click_delete_by_index(0)
+        comment_page.wait_for_confirm_dialog()
+        comment_page.confirm_delete()
+        comment_page.wait_for_loading_finish()
+        total_after = db_query.comment_count()
+        assert total_after == total_before - 1,             f"删除评论后总数应-1: {total_before}->{total_after}"
 
     def test_admin_stats_consistent_flow(self):
         """YW-GLWZ-003: 统计数据一致"""
         c = _c("YW-GLWZ-003")
         dashboard = PageAdminDashboard(self.driver)
         dashboard.login_and_open(c.login_user, c.login_password)
+        import re
         stats = dashboard.get_stat_numbers()
-        assert len(stats) > 0
+        assert len(stats) >= 3, f"仪表盘应显示三项统计，实际={stats}"
+        ui_vals = sorted(int(re.search(r"\d+", s).group()) for s in stats)
+        expected = db_query.dashboard_counts()
+        db_vals = sorted(expected.values())
+        assert ui_vals == db_vals,             f"统计数据与实际不一致: UI={ui_vals}, DB={db_vals}"
 
     def test_normal_user_no_article_manage_flow(self):
         """YW-GLWZ-004: 普通用户无文章管理权限"""
@@ -786,7 +967,26 @@ class TestArticleLifecycleFlow:
         home.open_url()
         home.wait_for_page_ready()
         titles = home.get_all_article_titles()
-        assert any(c.field("标题") in t for t in titles)
+        assert any(c.field("标题") in t for t in titles),             f"发布后新文章'{c.field('标题')}'应在列表中可见"
+        # ── 生命周期收尾：删除文章，验证不可见且关联数据清理 ──
+        import re
+        aid = db_query.article_id_by_title(c.field("标题"))
+        assert aid, "新文章应已入库"
+        p_page = PagePersonal(self.driver)
+        p_page.open_url()
+        p_page.wait_for_page_ready()
+        p_page.click_my_articles()
+        p_page.wait_for_page_ready()
+        my_titles = p_page.get_article_titles()
+        idx_list = [i for i, t in enumerate(my_titles) if c.field("标题") in t]
+        assert idx_list, f"我的文章中应能看到'{c.field('标题')}'"
+        p_page.click_delete_by_index(idx_list[0])
+        p_page.wait_for_confirm_dialog()
+        p_page.confirm_dialog()
+        p_page.wait_for_page_ready()
+        assert db_query.article_field(aid, "deleted") == 1, "删除后文章应软删除"
+        bad = db_query.article_cascade_cleaned(aid)
+        assert not bad, f"删除后关联数据未清理: {bad}"
 
     def test_draft_to_publish_flow(self):
         """YW-SMZQ-002: 草稿→发布状态切换"""
@@ -801,7 +1001,17 @@ class TestArticleLifecycleFlow:
         home.open_url()
         home.wait_for_page_ready()
         titles = home.get_all_article_titles()
-        assert c.field("标题") not in titles
+        assert c.field("标题") not in titles, "草稿不应出现在公开列表"
+        # DB 回查：状态为草稿；"我的文章"中可见
+        aid = db_query.article_id_by_title(c.field("标题"))
+        assert aid, "草稿应已入库"
+        assert db_query.article_field(aid, "status") == 0, "草稿状态应为0"
+        p_page = PagePersonal(self.driver)
+        p_page.open_url()
+        p_page.wait_for_page_ready()
+        p_page.click_my_articles()
+        p_page.wait_for_page_ready()
+        assert any(c.field("标题") in t for t in p_page.get_article_titles()),             "草稿应在'我的文章'中可见"
 
     def test_non_author_no_permission_flow(self):
         """YW-SMZQ-003: 非作者无权修改删除"""
@@ -829,11 +1039,15 @@ class TestArticleLifecycleFlow:
     def test_admin_delete_visible_flow(self):
         """YW-SMZQ-004: 管理员删除后作者不可见"""
         c = _c("YW-SMZQ-004")
+        # 自造一篇文章作为删除目标（避免误删种子文章，污染后续用例）
+        target_title = "一次性-SMZQ004-待删除文章"
+        _publish_disposable(self.driver, "zhangsan", "123456", target_title)
         admin_page = PageAdminArticleManage(self.driver)
         admin_page.login_and_open(c.login_user, c.login_password)
-        if admin_page.get_row_count() == 0:
-            pytest.skip("文章列表为空，无法测试删除后不可见")
-        target_title = admin_page.get_article_title(0)
+        admin_page.input_search(target_title)
+        admin_page.click_search()
+        admin_page.wait_for_loading_finish()
+        assert admin_page.get_row_count() > 0, f"后台应能搜索到'{target_title}'"
         admin_page.click_delete_by_index(0)
         admin_page.wait_for_confirm_dialog()
         admin_page.confirm_delete()
@@ -846,11 +1060,15 @@ class TestArticleLifecycleFlow:
     def test_deleted_article_no_comment_flow(self):
         """YW-SMZQ-005: 删除文章后无法评论"""
         c = _c("YW-SMZQ-005")
+        # 自造一篇文章作为删除目标（避免误删种子文章，污染后续用例）
+        target_title = "一次性-SMZQ005-待删除文章"
+        _publish_disposable(self.driver, "zhangsan", "123456", target_title)
         admin_page = PageAdminArticleManage(self.driver)
         admin_page.login_and_open("admin", "admin123")
-        if admin_page.get_row_count() == 0:
-            pytest.skip("文章列表为空，无法测试删除后评论")
-        # 记录第一篇文章ID，然后删除
+        admin_page.input_search(target_title)
+        admin_page.click_search()
+        admin_page.wait_for_loading_finish()
+        assert admin_page.get_row_count() > 0, f"后台应能搜索到'{target_title}'"
         article_id = admin_page.get_article_id(0)
         admin_page.click_delete_by_index(0)
         admin_page.wait_for_confirm_dialog()
@@ -885,7 +1103,18 @@ class TestVisitorFlow:
         home = PageHome(self.driver)
         home.open_url()
         home.wait_for_page_ready()
-        assert home.get_article_count() >= 0
+        assert home.get_article_count() > 0, "访客应能浏览文章列表"
+        # 能打开文章详情
+        home.click_article_by_index(0)
+        home.wait_for_page_ready()
+        detail = PageArticleDetail(self.driver)
+        assert detail.get_title().strip(), "访客应能浏览文章详情"
+        # 站点统计可见（关于页 .stats-grid）
+        base = self.driver.current_url.split("/")[0] + "//" + self.driver.current_url.split("/")[2]
+        self.driver.get(base + "/about")
+        home.wait_for_page_ready()
+        stats = self.driver.find_elements(By.CSS_SELECTOR, ".stat-card")
+        assert stats, "访客应能看到站点统计数据"
 
     def test_visitor_category_author_flow(self):
         """YW-FK-002: 访客浏览分类和作者"""
@@ -894,7 +1123,12 @@ class TestVisitorFlow:
         home.open_url()
         home.wait_for_page_ready()
         categories = home.get_category_names()
-        assert len(categories) >= 0
+        assert len(categories) > 0, "访客应能浏览分类"
+        # 作者主页可浏览
+        author = PageAuthor(self.driver)
+        author.open_url("/author/2")
+        author.wait_for_page_ready()
+        assert author.get_author_name().strip(), "访客应能浏览作者主页"
 
     def test_visitor_comment_login_prompt_flow(self):
         """YW-FK-003: 访客评论提示登录"""
@@ -913,6 +1147,8 @@ class TestVisitorFlow:
     def test_visitor_favorite_login_prompt_flow(self):
         """YW-FK-004: 访客收藏提示登录"""
         c = _c("YW-FK-004")
+        # 确保未登录（前序用例可能已登录）
+        self.driver.delete_all_cookies()
         home = PageHome(self.driver)
         home.open_url()
         home.wait_for_page_ready()

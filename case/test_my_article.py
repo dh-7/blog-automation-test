@@ -45,7 +45,6 @@ class TestMyArticle:
             draft = page.get_draft_count()
             assert pub > 0, f"已发布数量应>0，实际={pub}"
             assert draft > 0, f"草稿数量应>0，实际={draft}"
-            auto_assert(page, driver, case.expected)
             return
 
         # FC-WDWZ-002: 归档页面按年月分组显示文章
@@ -78,8 +77,7 @@ class TestMyArticle:
             # 6. 验证标题数与日期数一致
             assert len(titles) == len(dates), \
                 f"文章标题数({len(titles)})应与日期数({len(dates)})一致"
-            # 7. 通用断言（传入 archive 而非 page）
-            auto_assert(archive, driver, case.expected)
+            # 已逐项精确断言，不再走通用断言
             return
 
         # FC-WDWZ-003: 有文章的用户进入我的文章显示全部（含草稿和已发布）
@@ -109,7 +107,6 @@ class TestMyArticle:
             assert page.is_empty(), "无文章的用户应显示空列表"
             titles = driver.find_elements(By.CSS_SELECTOR, '.article-title')
             assert len(titles) == 0, "文章列表应确实为空"
-            auto_assert(page, driver, case.expected)
             return
 
         # FC-WDWZ-005: 点击某月显示该月发布的文章
@@ -127,8 +124,16 @@ class TestMyArticle:
                     archive.click_month_by_name(months[0])
                 archive.wait_for_page_ready()
             month_articles = archive.get_month_article_titles()
-            assert len(month_articles) >= 0, "应显示该月发布的文章列表"
-            auto_assert(page, driver, case.expected)
+            clicked_month = target_month if (target_month and target_month in months) else (months[0] if months else None)
+            assert clicked_month, "归档页应存在可点击的月份分组"
+            # 点击月份后展示的文章列表应为空或非空，且与该月的计数一致
+            counts = archive.get_month_counts()
+            count_map = {}
+            for name, cnt in counts:
+                count_map[name.strip()] = cnt
+            expected_count = count_map.get(clicked_month.strip())
+            assert expected_count is not None,                 f"归档页应显示'{clicked_month}'的文章计数"
+            assert len(month_articles) == expected_count,                 f"展开'{clicked_month}'后文章数应=该月计数: 列表={len(month_articles)}, 计数={expected_count}"
             return
 
         # FC-WDWZ-006: 未登录用户访问我的文章跳转登录页

@@ -75,7 +75,8 @@ class TestRegister:
                     '//*[contains(@class,"dropdown-menu")]//*[contains(text(),"后台管理")]')
                 assert len(admin_menu_items) == 0, \
                     "新注册用户应为普通用户角色，下拉菜单不应显示后台管理入口"
-            auto_assert(page, driver, case.expected)
+            else:
+                pytest.fail("登录后应显示用户头像，无法验证角色入口")
             return
 
         # FC-ZC-014: 注册后可直接用新账号登录系统
@@ -116,5 +117,10 @@ class TestRegister:
         page.input_password(password)
         page.input_confirm_password(confirm_password)
         page.click_register_button()
-        auto_assert(page, driver, case.expected)
-        page.wait_for_page_ready()
+        if "失败" in (case.expected or ''):
+            auto_assert(page, driver, case.expected)
+            page.wait_for_page_ready()
+        else:
+            # 注册成功：应跳转到登录页（不以"无报错"推定成功）
+            assert_url(page, driver, '/login')
+            page.wait_for_page_ready()

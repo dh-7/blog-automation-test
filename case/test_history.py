@@ -6,6 +6,7 @@ from page.page_home import PageHome
 from page.page_login import PageLogin
 from page.page_history import PageHistory
 from page.page_article_detail import PageArticleDetail
+from utils import db_query
 from utils.assert_helpers import auto_assert, assert_url
 from utils.paths import UI_DATASOURCE as DATASOURCE
 import allure
@@ -97,29 +98,85 @@ class TestHistory:
 
         # FC-YDLS-006: 清空只清自己的不影响其他用户
         if case_id == 'FC-YDLS-006':
-            # 清空当前用户(zhangsan)的阅读历史
-            history.click_clear_all()
+            # 隔离验证：lisi 先产生历史 → zhangsan 清空自己的 → lisi 的历史仍在
+            from case.conftest import login as _login
+            home0 = PageHome(self.driver)
+            _login(self.driver, 'lisi', '123456')
+            home0.open_url()
+            home0.wait_for_page_ready()
+            assert home0.get_article_count() > 0, "首页应有文章供 lisi 浏览"
+            home0.click_article_by_index(0)
+            home0.wait_for_page_ready()
+            import re as _re
+            m = _re.search(r"/article/(\d+)", self.driver.current_url)
+            assert m, "应成功打开文章详情页"
+            lisi_article_id = int(m.group(1))
+            # zhangsan 清空自己的阅读历史（重新登录后需重新打开历史页）
+            _login(self.driver, user, pwd)
+            history.open_url(case.resolved_path())
             history.wait_for_page_ready()
-            # 处理确认弹框
+            history.click_clear_all()
             try:
                 history.wait_for_confirm_dialog(timeout=3)
                 history.confirm_dialog()
                 history.wait_for_page_ready()
             except Exception:
                 pass
-            # 登录另一个用户(lisi)验证历史不受影响
-            login_page = PageLogin(self.driver)
-            login_page.login('lisi', '123456')
-            # 先让lisi浏览一篇文章产生历史
-            home = PageHome(self.driver)
-            home.open_url()
-            home.wait_for_page_ready()
-            if home.get_article_count() > 0:
-                home.click_article_by_index(0)
-                home.wait_for_page_ready()
+            # 切回 lisi：其阅读历史应不受影响，仍包含刚才浏览的文章
+            _login(self.driver, 'lisi', '123456')
+            home0.open_url()
+            home0.wait_for_page_ready()
             history.open_url(case.resolved_path())
             history.wait_for_page_ready()
-            auto_assert(history, self.driver, case.expected)
+            titles_after = history.get_article_titles()
+            assert history.get_history_count() > 0, \
+                "zhangsan 清空自己的历史后，lisi 的历史不应被清空"
+            detail0 = PageArticleDetail(self.driver)
+            detail0.open_url(f'/article/{lisi_article_id}')
+            detail0.wait_for_page_ready()
+            lisi_title = detail0.get_title()
+            assert any(lisi_title in t for t in titles_after), \
+                f"lisi 的历史应包含其浏览的文章'{lisi_title}'，实际={titles_after[:3]}"
+            return
+
+        # FC-YDLS-003: 再次浏览同一篇文章阅读时间更新
+        if case_id == 'FC-YDLS-003':
+            # 第一次浏览已发生（上方通用流程），取 article_id 做 DB 前后对比
+            import re as _re
+            m = _re.search(r"/article/(\d+)", self.driver.current_url)
+            if not m:
+                # 通用流程走的是首页第一篇，重新以详情页 URL 定位
+                home0 = PageHome(self.driver)
+                home0.open_url()
+                home0.wait_for_page_ready()
+                home0.click_article_by_index(0)
+                home0.wait_for_page_ready()
+                m = _re.search(r"/article/(\d+)", self.driver.current_url)
+            assert m, "应能定位到被浏览的文章ID"
+            article_id = int(m.group(1))
+            t1 = db_query.read_time(user, article_id)
+            assert t1 is not None, "第一次浏览后 read_history 应有记录"
+            # 第二次浏览同一篇
+            detail0 = PageArticleDetail(self.driver)
+            import time as _time
+            from datetime import datetime
+            _time.sleep(1.1)  # 保证时间戳可区分（秒级精度）
+            _mark = datetime.now()
+            detail0.open_url(f'/article/{article_id}')
+            detail0.wait_for_page_ready()
+            t2 = db_query.read_time(user, article_id)
+            assert t2 is not None and t2 > t1, \
+                f"再次浏览后阅读时间应更新: 更新前={t1}, 更新后={t2}（第二次浏览开始于{_mark}）"
+            return
+
+        # FC-YDLS-002: 浏览文章详情自动记录到阅读历史
+        if case_id == 'FC-YDLS-002':
+            assert target_title, "浏览详情页时应能取到文章标题"
+            # 历史列表中应能看到刚浏览的文章
+            titles = history.get_article_titles()
+            assert titles, "阅读历史列表不应为空"
+            assert any(target_title in t for t in titles), \
+                f"刚浏览的文章'{target_title}'应出现在阅读历史中，实际={titles[:3]}"
             return
 
         auto_assert(history, self.driver, case.expected)

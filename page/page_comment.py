@@ -10,16 +10,20 @@ class PageComment(BasePage):
         """初始化方法"""
         super().__init__(driver)
         # ==================== 评论列表元素 ====================
+        # CommentItem.vue 实际结构：.username / .comment-body / .time / .comment-actions
         self.comment_items = (By.CSS_SELECTOR, ".comment-item")
-        self.comment_content = (By.CSS_SELECTOR, ".comment-content")
+        self.comment_content = (By.CSS_SELECTOR, ".comment-body")
         self.comment_author = (By.CSS_SELECTOR, ".username")
-        self.comment_time = (By.CSS_SELECTOR, ".comment-time")
+        self.comment_time = (By.CSS_SELECTOR, ".time")
 
         # ==================== 回复元素 ====================
         # CommentItem.vue 中回复按钮是 <el-button>，无 .reply-btn class
         self.reply_btn = (By.XPATH, '//div[contains(@class,"comment-actions")]//button[contains(.,"回复")]')
         # 回复输入框：el-input type="textarea" 渲染为 .el-textarea__inner
         self.reply_input = (By.CSS_SELECTOR, ".reply-form .el-textarea__inner")
+        # 回复表单的提交按钮（"回复"主按钮）：点它才真正提交回复；
+        # 主评论表单的"发表评论"按钮与回复无关，点它会导致回复静默丢失
+        self.reply_submit_btn = (By.CSS_SELECTOR, ".reply-form .el-button--primary")
 
         # ==================== 删除元素 ====================
         # CommentItem.vue 中删除按钮是 <el-button type="danger">，无 .delete-btn class
@@ -49,10 +53,35 @@ class PageComment(BasePage):
         items = self.find_all(self.comment_content)
         return items[index].text
 
+    def get_comment_time(self, index):
+        """获取第N条评论的评论时间"""
+        items = self.find_all(self.comment_time)
+        return items[index].text
+
     def get_comment_author(self, index):
         """获取第N条评论的作者"""
         items = self.find_all(self.comment_author)
         return items[index].text
+
+    def get_comment_authors(self):
+        """获取全部评论作者（与评论项一一对应）"""
+        return [el.text.strip() for el in self.find_all(self.comment_author)]
+
+    def get_reply_to_texts(self):
+        """获取所有"回复 XXX"被回复人提示文本"""
+        return [el.text.strip() for el in self.find_all(self.reply_target)]
+
+    def get_nested_comment_count(self):
+        """获取嵌套在父评论内的子评论数量（树形结构的子评论）"""
+        return len(self.driver.find_elements(
+            By.CSS_SELECTOR, ".comment-item .comment-item"))
+
+    def get_nested_comment_bodies(self, parent_index):
+        """获取第N条父评论下所有子评论的内容"""
+        parents = self.find_all(self.comment_items)
+        nested = parents[parent_index].find_elements(
+            By.CSS_SELECTOR, ".comment-item .comment-body")
+        return [el.text.strip() for el in nested]
 
     # ==================== 回复操作 ====================
 
@@ -68,6 +97,16 @@ class PageComment(BasePage):
         # 等待回复表单出现（点击回复按钮后异步渲染）
         self.wait_for_reply_form()
         self.input(self.reply_input, text)
+
+    @allure.step("提交回复")
+    def submit_reply(self):
+        """点击回复表单内的提交按钮（真正把回复提交出去）
+
+        注意：必须点 .reply-form 内的主按钮；主评论表单的"发表评论"按钮
+        与回复无关——此前误点它是回复类用例收不到通知的根因。
+        """
+        self.wait_for_reply_form()
+        self.click(self.reply_submit_btn)
 
     def wait_for_reply_form(self, timeout=None):
         """等待回复输入框出现"""

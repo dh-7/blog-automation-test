@@ -66,6 +66,15 @@ class PageNotification(BasePage):
         items = self.find_all(self.notification_items)
         items[index].click()
 
+    def click_first_unread(self):
+        """点击第一条未读通知（带未读蓝点）；无未读时返回 False"""
+        items = self.driver.find_elements(*self.notification_items)
+        for it in items:
+            if it.find_elements(*self.unread_dot):
+                it.click()
+                return True
+        return False
+
     # ==================== 批量操作 ====================
 
     @allure.step("点击全部已读")

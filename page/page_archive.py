@@ -44,6 +44,17 @@ class PageArchive(BasePage):
     def get_month_names(self):
         return [el.text.strip() for el in self.find_all(self.month_names)]
 
+    def get_month_counts(self):
+        """获取各月份分组 (月份名, 文章计数) 列表"""
+        import re
+        names = self.find_all(self.month_names)
+        counts = self.find_all(self.month_counts)
+        result = []
+        for i in range(min(len(names), len(counts))):
+            m = re.search(r"\d+", counts[i].text)
+            result.append((names[i].text.strip(), int(m.group()) if m else None))
+        return result
+
     @allure.step("点击月份")
     def click_month_by_name(self, name):
         locator = (By.XPATH, f'//span[@class="month-name" and text()="{name}"]/ancestor::div[@class="month-item"]')

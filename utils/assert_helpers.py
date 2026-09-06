@@ -1,5 +1,11 @@
-"""UI 测试断言辅助工具 — 根据预期结果文本自动选择断言方式"""
+"""UI 测试断言辅助工具 — 根据预期结果文本自动选择断言方式
+
+原则：无法从预期文本解析出"可执行断言"时必须显式失败（或由用例通过
+allow_unverified=True 显式声明放弃自动验证），绝不允许静默通过——
+静默通过就是假通过。
+"""
 import re
+from urllib.parse import urlparse
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.by import By
@@ -14,6 +20,7 @@ _URL_KEYWORDS = {
     "注册": "/register",
     "后台": "/admin",
     "个人中心": "/profile",
+    "作者主页": "/author",
 }
 
 # 错误提示类关键词（toast 或表单错误）
@@ -81,18 +88,58 @@ def _check_page_not_contains(page, driver, text):
     assert text not in source, f"页面中不应包含文本: '{text}'"
 
 
-def auto_assert(page, driver, expected):
+def _current_path(driver):
+    """当前 URL 的 path（不含协议/域名/查询串），避免 '/' 之类子串恒真匹配"""
+    return urlparse(driver.current_url).path
+
+
+def _wait_and_check_url(page, driver, url_part, expected):
+    """等待并断言当前路径匹配 url_part
+
+    - '/' 表示首页：要求 path 精确为 '/'（任何 URL 都包含 '/'，子串匹配恒真）
+    - 其余要求 url_part 出现在 path 中
+    - 预期含"非后台"时，附加断言 path 不含 /admin
+    """
+    if url_part == "/":
+        try:
+            WebDriverWait(driver, 10).until(
+                lambda d: _current_path(d) in ("/", "")
+            )
+        except Exception:
+            pass
+        path = _current_path(driver)
+        assert path in ("/", ""), \
+            f"预期跳转到首页，实际 path: '{path}'（URL: {driver.current_url}）"
+    else:
+        try:
+            page.wait_for_url_contains(url_part, timeout=10)
+        except Exception:
+            pass
+        path = _current_path(driver)
+        assert url_part in path, \
+            f"预期跳转到 {url_part}，实际 path: '{path}'（URL: {driver.current_url}）"
+    if "非后台" in expected:
+        assert "/admin" not in _current_path(driver), \
+            f"预期非后台页面，实际仍在后台: {driver.current_url}"
+
+
+def auto_assert(page, driver, expected, allow_unverified=False):
     """根据预期结果文本自动断言
 
     逻辑：
-    1. 包含"跳转" → 检查 URL
+    1. 包含"跳转" → 检查 URL（按 path 匹配，'/' 精确匹配首页）
     2. 包含错误关键词 → 检查 toast 或表单错误（必须找到，否则失败）
-    3. 包含"显示" → 检查页面包含预期文本
-    4. 包含"消失/为空/不可见/不包含" → 检查页面不包含或列表为空
-    5. 包含"弹出/确认/提示框" → 检查弹窗出现
-    6. 包含"进入" → 检查 URL 跳转
-    7. 包含"成功" → 检查 toast 或 URL 变化
-    8. 其他 → 检查页面包含预期文本
+    3. 包含"消失/为空/不可见/不包含" → 检查页面不包含或列表为空
+       （"不产生"类预期需要前后对比，auto_assert 无法凭单次页面状态验证 → 失败）
+    4. 包含"弹出/确认/提示框" → 检查弹窗出现
+    5. 包含"进入" → 检查 URL
+    6. 包含"成功" → 必须捕获到成功 toast（否则失败，由用例显式断言具体结果）
+    7. 包含"显示" → 检查页面包含预期文本 / 关键词映射元素
+    8. 其他 → 无法解析出可执行断言，失败
+
+    Args:
+        allow_unverified: 显式声明"本用例预期无法自动验证"的逃生舱，
+            仅允许在用例内已有独立显式断言时使用，会以 warning step 记入报告。
     """
     if not expected:
         return
@@ -101,12 +148,7 @@ def auto_assert(page, driver, expected):
     if "跳转" in expected:
         _kw, url_part = _match_url_keyword(expected, "跳转")
         if url_part is not None:
-            try:
-                page.wait_for_url_contains(url_part, timeout=10)
-            except Exception:
-                pass
-            assert url_part in driver.current_url, \
-                f"预期跳转到 {url_part}，实际 URL: {driver.current_url}"
+            _wait_and_check_url(page, driver, url_part, expected)
             return
 
     # 2. 错误提示类（toast 或表单验证）— 必须找到，否则失败
@@ -206,6 +248,12 @@ def auto_assert(page, driver, expected):
     _not_present_keywords = ["不显示", "消失", "为空", "空列表", "不可见", "不包含", "不产生"]
     for keyword in _not_present_keywords:
         if keyword in expected:
+            # 3d. "不产生" 类需要操作前后对比，单次页面状态无法验证 → 显式失败
+            if keyword == "不产生":
+                raise AssertionError(
+                    f"预期'{expected}'包含'不产生'类声明，auto_assert 无法凭单次页面状态"
+                    f"验证，请在用例中显式做前后对比断言（参考 utils/db_query.py）"
+                )
             page.wait_for_page_ready()
             # 3a. 提取引号文本，验证已从页面消失
             quoted = _extract_quoted_texts(expected)
@@ -236,13 +284,6 @@ def auto_assert(page, driver, expected):
                     for qt in quoted:
                         assert qt not in item.text, \
                             f"列表项中不应包含'{qt}'，但实际包含"
-            # 3d. "不产生" → 验证没有新通知/数据产生
-            if "不产生" in expected:
-                notif_items = driver.find_elements(
-                    By.CSS_SELECTOR, '.notification-item')
-                # "不产生通知"时，通知列表应为空或无新通知
-                # 这里只做基础检查，具体逻辑由业务流程测试覆盖
-                pass
             return
 
     # 4. "弹出/确认/提示框" 类 → 检查弹窗出现
@@ -269,39 +310,26 @@ def auto_assert(page, driver, expected):
     if "进入" in expected:
         _kw, url_part = _match_url_keyword(expected, "进入")
         if url_part is not None:
-            try:
-                page.wait_for_url_contains(url_part, timeout=10)
-            except Exception:
-                pass
-            assert url_part in driver.current_url, \
-                f"预期进入 {url_part}，实际 URL: {driver.current_url}"
+            _wait_and_check_url(page, driver, url_part, expected)
             return
-        # 没有匹配到具体页面，至少检查页面加载且无错误
-        page.wait_for_page_ready()
-        source = driver.page_source
-        assert len(source) > 500, "页面内容过少，可能加载失败"
-        return
+        # 没有匹配到具体页面 → 无法验证 → 显式失败（禁止"页面有内容就算过"）
+        raise AssertionError(
+            f"预期'{expected}'包含'进入'但未匹配到目标页面关键词，"
+            f"auto_assert 无法验证，请在用例中显式断言"
+        )
 
-    # 6. "成功" 类 → 检查 toast 出现或页面状态变化
+    # 6. "成功" 类 → 必须捕获到成功 toast
     if "成功" in expected:
         # 尝试找 toast（各种成功提示）
         for toast_text in ["成功", "已", "完成"]:
             toast = page.wait_for_toast(toast_text, timeout=3)
             if toast:
                 return
-        # 没有 toast → 验证操作未失败
-        page.wait_for_page_ready()
-        # 检查是否有错误提示（说明操作失败）
-        error = page.find_form_error()
-        assert not error, f"操作出现表单错误: {error}"
-        # 检查页面不含明显的失败/错误状态
-        source = driver.page_source
-        error_els = driver.find_elements(
-            By.CSS_SELECTOR, '.el-result__title, .error-state')
-        if error_els:
-            err_text = error_els[0].text
-            assert False, f"页面显示错误状态: {err_text}"
-        return
+        # 没有 toast → 无法证明操作成功 → 显式失败（禁止"没报错就算成功"）
+        raise AssertionError(
+            f"预期'{expected}'包含'成功'但未捕获到任何成功提示，"
+            f"auto_assert 拒绝以'未报错'推定成功，请在用例中显式断言具体结果"
+        )
 
     # 7. "显示" 类 → 检查页面包含预期文本或元素
     if "显示" in expected:
@@ -352,23 +380,24 @@ def auto_assert(page, driver, expected):
                         f"预期显示{keyword}，但未找到对应元素({selector})"
                     checked = True
                     break
-            # 7c. 如果关键词都不匹配，至少验证页面有实质内容
+            # 7c. 关键词都不匹配 → 无法验证 → 显式失败
             if not checked:
-                assert len(source) > 500, \
-                    "页面内容过少，可能加载失败"
+                raise AssertionError(
+                    f"预期'{expected}'包含'显示'但未命中任何元素关键词，"
+                    f"auto_assert 无法验证，请在用例中显式断言"
+                )
         return
 
-    # 8. 默认 → 检查页面加载且无错误状态
-    page.wait_for_page_ready()
-    source = driver.page_source
-    # 至少验证页面有实质内容
-    assert len(source) > 500, "页面内容过少，可能加载失败"
-    # 检查页面不处于错误/异常状态
-    error_els = driver.find_elements(
-        By.CSS_SELECTOR, '.el-result__title, .error-state')
-    if error_els:
-        err_text = error_els[0].text
-        assert False, f"页面显示错误状态: {err_text}"
+    # 8. 默认 → 无法从预期文本解析出可执行断言 → 显式失败（假通过源头，已封死）
+    if allow_unverified:
+        import allure
+        with allure.step(f"⚠ 显式声明：预期'{expected}'无法自动验证（用例已自行断言）"):
+            pass
+        return
+    raise AssertionError(
+        f"预期'{expected}'无法解析出可执行断言（未命中任何断言策略），"
+        f"auto_assert 拒绝静默通过；请在用例中显式断言，或修正预期文本"
+    )
 
 
 def assert_url(page, driver, url_part):

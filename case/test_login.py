@@ -27,13 +27,15 @@ class TestLogin:
         allure.dynamic.story("登录")
         page = PageLogin(driver)
 
-        # FC-DL-001: 页面元素检查
+        # FC-DL-001: 页面元素检查（用户名输入框、密码输入框、登录按钮逐项校验）
         if case_id == 'FC-DL-001':
             with allure.step("打开登录页"):
                 page.open_url(case.resolved_path())
                 page.wait_for_page_ready()
             with allure.step("验证页面元素"):
-                auto_assert(page, driver, case.expected)
+                assert driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="请输入用户名"]'),                     "登录页应显示用户名输入框"
+                assert driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="请输入密码"]'),                     "登录页应显示密码输入框"
+                assert driver.find_elements(By.XPATH, '//button//span[text()="登录"]'),                     "登录页应显示登录按钮"
             return
 
         # FC-DL-009: 错误用户名和错误密码的提示信息一致
@@ -48,7 +50,7 @@ class TestLogin:
                 page.input_username(u1)
                 page.input_password(p1)
                 page.click_login_button()
-                page.wait_for_page_ready()
+                # get_fail_result 自带等待；此处不能再 wait_for_page_ready（会等过期 3 秒的 toast）
                 error1 = page.get_fail_result()
             with allure.step("场景2: 错误密码"):
                 page.open_url(case.resolved_path())
@@ -56,11 +58,10 @@ class TestLogin:
                 page.input_username(u2)
                 page.input_password(p2)
                 page.click_login_button()
-                page.wait_for_page_ready()
                 error2 = page.get_fail_result()
             with allure.step("验证提示信息一致"):
                 assert error1 == error2, f"两次错误提示不一致: '{error1}' vs '{error2}'"
-                auto_assert(page, driver, case.expected)
+                assert "用户名或密码错误" in error1,                     f"提示信息应为'用户名或密码错误'，实际='{error1}'"
             return
 
         # FC-DL-010: 登录成功后页面显示当前用户的昵称和头像
@@ -121,5 +122,11 @@ class TestLogin:
             if "失败" not in case.expected:
                 page.wait_for_login_success()
         with allure.step("验证结果"):
+            if "失败" not in case.expected and username == "admin":
+                # 管理员登录后的"首页"即后台 /admin（应用行为）
+                from urllib.parse import urlparse
+                path = urlparse(driver.current_url).path
+                assert path.startswith("/admin"),                     f"管理员登录后应进入后台，实际 path={path}"
+                return
             auto_assert(page, driver, case.expected)
             page.wait_for_page_ready()

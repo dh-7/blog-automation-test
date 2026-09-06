@@ -1,11 +1,13 @@
 """评论模块 UI 测试 — 数据驱动"""
 import os, sys, pytest
+from selenium.webdriver.common.by import By
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from base.data_loader import UiDataLoader
 from page.page_home import PageHome
 from page.page_login import PageLogin
 from page.page_article_detail import PageArticleDetail
 from page.page_comment import PageComment
+from utils import db_query
 from utils.assert_helpers import auto_assert, assert_url, assert_toast
 from utils.config import Config
 from utils.paths import UI_DATASOURCE as DATASOURCE
@@ -80,6 +82,61 @@ class TestComment:
             assert comment.is_login_hint_visible(), "未登录应显示'登录 后发表评论'登录提示"
             return
 
+        # FC-PL-001: 评论区显示评论者完整信息（头像、昵称、内容、时间逐项结构校验）
+        if case_id == 'FC-PL-001':
+            detail = PageArticleDetail(self.driver)
+            comment = PageComment(self.driver)
+            detail.open_url(case.resolved_path())
+            detail.wait_for_page_ready()
+            items = comment.get_comments()
+            assert len(items) > 0, "文章1应有种子评论"
+            for i in range(len(items)):
+                assert comment.get_comment_author(i).strip(), f"评论{i}缺昵称"
+                assert comment.get_comment_text(i).strip(), f"评论{i}缺内容"
+                assert comment.get_comment_time(i).strip(), f"评论{i}缺时间"
+                avatar = items[i].find_elements(By.CSS_SELECTOR, ".el-avatar img, .el-avatar")
+                assert avatar, f"评论{i}缺头像"
+            return
+
+        # FC-PL-002: 树形评论结构正确，子评论缩进显示在父评论下方
+        if case_id == 'FC-PL-002':
+            detail = PageArticleDetail(self.driver)
+            comment = PageComment(self.driver)
+            detail.open_url(case.resolved_path())
+            detail.wait_for_page_ready()
+            # 真正校验树形结构：存在嵌套在父评论内的子评论（种子数据含2条回复）
+            nested_count = comment.get_nested_comment_count()
+            assert nested_count > 0, \
+                "应存在嵌套在父评论下方的子评论（树形结构），实际嵌套子评论数=0"
+            return
+
+        # FC-PL-003: 回复评论显示被回复人的昵称（子评论的"回复 X"应等于父评论作者）
+        if case_id == 'FC-PL-003':
+            detail = PageArticleDetail(self.driver)
+            comment = PageComment(self.driver)
+            detail.open_url(case.resolved_path())
+            detail.wait_for_page_ready()
+            # 顶层评论（排除嵌套的子评论）
+            tops = self.driver.find_elements(
+                By.XPATH, '//*[contains(@class,"comment-item") '
+                          'and not(ancestor::div[contains(@class,"comment-item")])]')
+            assert tops, "应有顶层评论"
+            reply_seen = 0
+            for top in tops:
+                username_els = top.find_elements(By.CSS_SELECTOR, ".username")
+                if not username_els:
+                    continue
+                parent_nick = username_els[0].text.strip()
+                reply_els = top.find_elements(By.CSS_SELECTOR, ".reply-to")
+                for r in reply_els:
+                    target = r.text.strip().replace("回复", "").strip()
+                    reply_seen += 1
+                    assert target, "被回复人昵称为空"
+                    assert target == parent_nick, \
+                        f"子评论'回复 {target}'与父评论作者'{parent_nick}'不一致"
+            assert reply_seen > 0, "种子数据应包含带被回复人昵称的子评论"
+            return
+
         # FC-PL-006: 评论别人的文章触发作者通知（特殊处理）
         if case_id == 'FC-PL-006':
             user = case.login_user or "lisi"
@@ -113,7 +170,10 @@ class TestComment:
             notif.wait_for_page_ready()
             notif_count = notif.get_notification_count()
             assert notif_count > 0, f"评论后通知中心应有通知，实际通知数={notif_count}"
-            auto_assert(notif, self.driver, case.expected)
+            # 通知内容应指向本次评论（精确验证，而非仅"有通知"）
+            latest = db_query.latest_notification(author_username)
+            assert latest and latest[0] == 'comment', \
+                f"最新通知类型应为 comment，实际={latest}"
             return
 
         # FC-PL-007: 回复某人的评论触发被回复人通知（特殊处理）
@@ -144,11 +204,11 @@ class TestComment:
                     break
             if reply_to_user is None:
                 pytest.skip("文章ID=1没有非当前用户的评论，无法进行回复测试")
-            # 回复该评论
+            # 回复该评论（必须点回复表单内的提交按钮，回复才真正提交）
             reply_text = case.field("用户A的回复内容")
             comment.click_reply(reply_idx)
             comment.input_reply(reply_text)
-            comment.click_submit()
+            comment.submit_reply()
             comment.wait_for_page_ready()
             # 切换到被回复人账号验证通知
             from page.page_notification import PageNotification
@@ -160,7 +220,31 @@ class TestComment:
             notif.wait_for_page_ready()
             notif_count = notif.get_notification_count()
             assert notif_count > 0, f"回复后被回复人通知中心应有通知，实际通知数={notif_count}"
-            auto_assert(notif, self.driver, case.expected)
+            latest = db_query.latest_notification(reply_to_username)
+            assert latest and latest[0] == 'reply', \
+                f"最新通知类型应为 reply，实际={latest}"
+            return
+
+        # FC-PL-005: 回复某评论成功显示为子评论（必须真正提交回复并验证子评论出现）
+        if case_id == 'FC-PL-005':
+            user = case.login_user or "zhangsan"
+            pwd = case.login_password or "123456"
+            login_page = PageLogin(self.driver)
+            login_page.login(user, pwd)
+            detail = PageArticleDetail(self.driver)
+            detail.open_url(case.resolved_path())
+            detail.wait_for_page_ready()
+            comment = PageComment(self.driver)
+            parent_before = comment.get_nested_comment_count()
+            comment.click_reply(0)
+            comment.input_reply(reply_text)
+            comment.submit_reply()
+            comment.wait_for_page_ready()
+            nested_bodies = comment.get_nested_comment_bodies(0)
+            assert any(reply_text in b for b in nested_bodies), \
+                f"回复'{reply_text}'应作为第1条评论的子评论显示，实际子评论={nested_bodies}"
+            assert comment.get_nested_comment_count() == parent_before + 1, \
+                "回复提交后嵌套子评论数应+1"
             return
 
         # 已登录操作
@@ -179,6 +263,9 @@ class TestComment:
             if comment_text:
                 # 精确断言: 评论提交后应出现在评论列表中
                 detail.assert_comment_exists(comment_text)
+            if case_id == 'FC-PL-004':
+                # 已用 assert_comment_exists 精确验证，不再走通用断言
+                return
             auto_assert(detail, self.driver, case.expected)
             detail.wait_for_page_ready()
 
@@ -194,16 +281,43 @@ class TestComment:
             personal = PagePersonal(self.driver)
             personal.open_url('/profile/comments')
             personal.wait_for_page_ready()
-            auto_assert(personal, self.driver, case.expected)
+            # 精确断言：页面评论内容集合 == DB 中当前登录用户的评论集合
+            page_contents = [el.text.strip() for el in self.driver.find_elements(
+                By.CSS_SELECTOR, '.comment-content')]
+            db_contents = set(db_query.user_comments_contents(user))
+            assert page_contents, "我的评论列表应有评论"
+            for c in page_contents:
+                assert c in db_contents, \
+                    f"我的评论列表出现了非当前用户的评论: '{c}'"
+            assert len(page_contents) == len(db_contents), \
+                f"列表条数({len(page_contents)})与DB中本人评论数({len(db_contents)})不一致"
             return
 
         # FC-PL-011: 只能删除自己的评论
         if case_id == 'FC-PL-011':
-            # 检查当前用户评论是否有删除按钮
-            if comment.get_comments():
-                has_delete = comment.has_delete_button(0)
-                assert has_delete, "自己的评论应有删除按钮"
-            auto_assert(detail, self.driver, case.expected)
+            # 显式打开文章1（数据源指定），避免依赖首页第一篇文章
+            detail = PageArticleDetail(self.driver)
+            detail.open_url('/article/1')
+            detail.wait_for_page_ready()
+            # 逐条校验：自己的评论有删除按钮，他人的评论没有
+            # （管理员可删任意评论属于管理员场景，本用例以普通用户视角验证）
+            me_nickname = db_query.scalar(
+                "SELECT nickname FROM user WHERE username=%s", (user,))
+            assert me_nickname, f"DB 中未找到用户 {user}"
+            authors = comment.get_comment_authors()
+            assert authors, "文章1应有评论"
+            checked_own = checked_other = 0
+            for i, author in enumerate(authors):
+                has_del = comment.has_delete_button(i)
+                if author == me_nickname:
+                    assert has_del, f"自己的评论(第{i}条, {author})应有删除按钮"
+                    checked_own += 1
+                else:
+                    assert not has_del, \
+                        f"他人评论(第{i}条, {author})不应显示删除按钮"
+                    checked_other += 1
+            assert checked_own > 0, "应至少校验到一条自己的评论"
+            assert checked_other > 0, "应至少校验到一条他人的评论"
             return
 
         auto_assert(detail, self.driver, case.expected)

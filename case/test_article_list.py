@@ -1,7 +1,9 @@
 import pytest
+from selenium.webdriver.common.by import By
 from base.data_loader import UiDataLoader
 from page.page_home import PageHome
 from page.page_category import PageCategory
+from utils import db_query
 from utils.paths import UI_DATASOURCE as DATASOURCE
 from utils.assert_helpers import auto_assert, assert_url
 import allure
@@ -27,25 +29,29 @@ class TestArticleList:
 
         # FC-WZLB-001: 文章列表每条显示完整信息（标题、摘要、作者、分类、标签、发布时间、浏览量）
         if case_id == 'FC-WZLB-001':
-            count = page.get_article_count()
-            assert count > 0, "首页应显示文章列表"
-            # 检查每条文章显示完整信息
-            auto_assert(page, driver, case.expected)
+            cards = page.find_all(page.article_cards)
+            assert len(cards) > 0, "首页应显示文章列表"
+            for i, card in enumerate(cards[:5]):
+                assert card.find_elements(By.CSS_SELECTOR, ".article-title"), f"卡片{i}缺标题"
+                assert card.find_elements(By.CSS_SELECTOR, ".article-summary"), f"卡片{i}缺摘要"
+                assert card.find_elements(By.CSS_SELECTOR, ".article-meta"), f"卡片{i}缺元信息"
             return
 
         # FC-WZLB-002: 分页组件正确显示（页码、总条数、每页条数）
         if case_id == 'FC-WZLB-002':
-            # 检查分页组件存在
             assert page.is_displayed(page.pagination), "分页组件应正确显示"
-            auto_assert(page, driver, case.expected)
+            numbers = page.find_all(page.page_numbers)
+            assert len(numbers) >= 1, "分页组件应显示页码"
             return
 
-        # FC-WZLB-003: 列表只显示已发布文章，草稿不显示
+        # FC-WZLB-003: 列表只显示已发布文章，草稿不显示（与 DB 草稿清单交叉验证）
         if case_id == 'FC-WZLB-003':
             titles = page.get_all_article_titles()
             assert len(titles) > 0, "列表应显示已发布文章"
-            # 验证只有已发布文章显示，草稿不在列表中
-            auto_assert(page, driver, case.expected)
+            drafts = db_query.draft_titles()
+            assert drafts, "前置数据缺失：DB 中无草稿文章，无法验证草稿被排除"
+            for d in drafts:
+                assert d not in titles, f"草稿文章'{d}'不应出现在公开文章列表"
             return
 
         # FC-WZLB-004: 打开文章列表默认显示第一页10条
@@ -86,7 +92,7 @@ class TestArticleList:
             auto_assert(page, driver, case.expected)
             return
 
-        # FC-WZLB-007: 选择分类筛选文章
+        # FC-WZLB-007: 选择分类筛选文章（结果必须都属于该分类，与 DB 交叉验证）
         if case_id == 'FC-WZLB-007':
             category = case.field('选择分类', '技术')
             cat_page = PageCategory(driver)
@@ -94,10 +100,15 @@ class TestArticleList:
             cat_page.wait_for_page_ready()
             cat_page.click_category_by_name(category)
             cat_page.wait_for_page_ready()
-            auto_assert(cat_page, driver, case.expected)
+            shown = cat_page.get_all_article_titles()
+            assert shown, f"分类'{category}'下应有文章"
+            allowed = set(db_query.article_titles_by_category(category))
+            for t in shown:
+                assert t in allowed, \
+                    f"分类筛选结果'{t}'不属于分类'{category}'（DB可显示={len(allowed)}篇）"
             return
 
-        # FC-WZLB-008: 选择标签筛选文章
+        # FC-WZLB-008: 选择标签筛选文章（结果必须都带有该标签，与 DB 交叉验证）
         if case_id == 'FC-WZLB-008':
             tag = case.field('选择标签', 'Java')
             cat_page = PageCategory(driver)
@@ -105,10 +116,15 @@ class TestArticleList:
             cat_page.wait_for_page_ready()
             cat_page.click_tag_by_name(tag)
             cat_page.wait_for_page_ready()
-            auto_assert(cat_page, driver, case.expected)
+            shown = cat_page.get_all_article_titles()
+            assert shown, f"标签'{tag}'下应有文章"
+            allowed = set(db_query.article_titles_by_tag(tag))
+            for t in shown:
+                assert t in allowed, \
+                    f"标签筛选结果'{t}'未携带标签'{tag}'（DB可显示={len(allowed)}篇）"
             return
 
-        # FC-WZLB-009: 同时选择分类并输入关键词筛选
+        # FC-WZLB-009: 同时选择分类并输入关键词筛选（分类严格约束 + 关键词至少命中一篇）
         if case_id == 'FC-WZLB-009':
             category = case.field('选择分类', '技术')
             keyword = case.field('关键词', 'Spring')
@@ -117,8 +133,21 @@ class TestArticleList:
             cat_page.wait_for_page_ready()
             cat_page.click_category_by_name(category)
             cat_page.wait_for_page_ready()
-            auto_assert(cat_page, driver, case.expected)
-            return
+            # 输入关键词（分类页搜索框，与首页搜索框同 placeholder）
+            from selenium.webdriver.common.keys import Keys
+            box = driver.find_elements(By.CSS_SELECTOR, "input[placeholder*='搜索']")
+            assert box, "分类页应有搜索输入框用于组合筛选"
+            box[0].send_keys(keyword)
+            box[0].send_keys(Keys.ENTER)
+            cat_page.wait_for_page_ready()
+            shown = cat_page.get_all_article_titles()
+            assert shown, f"分类'{category}'+关键词'{keyword}'应有筛选结果"
+            allowed = set(db_query.article_titles_by_category(category))
+            for t in shown:
+                assert t in allowed, \
+                    f"组合筛选结果'{t}'不属于分类'{category}'"
+            assert any(keyword.lower() in t.lower() for t in shown), \
+                f"组合筛选结果中应至少一篇标题含'{keyword}'，实际={shown}"
 
         # FC-WZLB-010: 搜索不存在的关键词显示空列表
         if case_id == 'FC-WZLB-010':
