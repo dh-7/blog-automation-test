@@ -1,9 +1,9 @@
 from selenium.webdriver.common.by import By
-from base import BasePage
+from base import BasePage, TablePageMixin
 import allure
 
 
-class PageAdminCommentManage(BasePage):
+class PageAdminCommentManage(TablePageMixin, BasePage):
     """管理员-评论管理页面类 — 元素定位 + 原子操作"""
 
     page_path = '/admin/comments'
@@ -13,8 +13,6 @@ class PageAdminCommentManage(BasePage):
         # 页面标题区域
         self.page_label = (By.XPATH, '//span[@style and contains(text(),"所有评论")]')
         self.total_tag = (By.CSS_SELECTOR, ".el-tag .el-tag__content")
-        # 表格元素
-        self.table_rows = (By.CSS_SELECTOR, ".el-table__row")
     def get_total_text(self):
         return self.get_text(self.total_tag)
 
@@ -22,18 +20,7 @@ class PageAdminCommentManage(BasePage):
         text = self.get_total_text()
         return int(''.join(filter(str.isdigit, text)))
 
-    # ==================== 表格数据读取 ====================
-
-    def get_table_rows(self):
-        return self.find_all(self.table_rows)
-
-    def get_row_count(self):
-        return len(self.get_table_rows())
-
-    def get_cell_text(self, row_index, col_index):
-        rows = self.get_table_rows()
-        cells = rows[row_index].find_elements(By.CSS_SELECTOR, ".el-table__cell, td")
-        return cells[col_index].text.strip()
+    # ==================== 表格数据读取（通用能力见 TablePageMixin） ====================
 
     def get_comment_id(self, row_index):
         return self.get_cell_text(row_index, 0)
@@ -57,9 +44,7 @@ class PageAdminCommentManage(BasePage):
 
     @allure.step("点击删除评论")
     def click_delete_by_index(self, row_index):
-        rows = self.get_table_rows()
-        btn = rows[row_index].find_element(By.XPATH, './/button[contains(.,"删除")]')
-        btn.click()
+        self.click_row_button(row_index, "删除")
 
     @allure.step("按内容删除评论")
     def click_delete_by_content(self, content):

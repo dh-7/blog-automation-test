@@ -1,6 +1,6 @@
 import pytest
 from selenium.webdriver.common.by import By
-from base.data_loader import UiDataLoader
+from utils.excel_loader import load_ui_cases
 from page.page_register import PageRegister
 from page.page_login import PageLogin
 from utils.paths import UI_DATASOURCE as DATASOURCE
@@ -8,11 +8,7 @@ from utils.assert_helpers import auto_assert, assert_url, assert_toast, assert_f
 import allure
 
 
-_loader = UiDataLoader(DATASOURCE)
-_cases = _loader.load_functional_cases(module='注册')
-_loader.close()
-_params = [(c.case_id, c) for c in _cases]
-_ids = [c.case_id for c in _cases]
+_params, _ids = load_ui_cases(module='注册')
 
 
 @allure.epic("UI自动化测试")

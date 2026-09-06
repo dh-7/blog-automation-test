@@ -1,7 +1,7 @@
 import pytest
-import time
 from selenium.webdriver.common.by import By
-from base.data_loader import UiDataLoader
+from selenium.webdriver.support.ui import WebDriverWait
+from utils.excel_loader import load_ui_cases
 from page.page_login import PageLogin
 from page.page_personal import PagePersonal
 from page.page_archive import PageArchive
@@ -10,11 +10,7 @@ from utils.paths import UI_DATASOURCE as DATASOURCE
 import allure
 
 
-_loader = UiDataLoader(DATASOURCE)
-_cases = _loader.load_functional_cases(module='我的文章与归档')
-_loader.close()
-_params = [(c.case_id, c) for c in _cases]
-_ids = [c.case_id for c in _cases]
+_params, _ids = load_ui_cases(module='我的文章与归档')
 
 
 @allure.epic("UI自动化测试")
@@ -52,8 +48,8 @@ class TestMyArticle:
             archive = PageArchive(driver)
             archive.open_url(case.resolved_path())
             archive.wait_for_page_ready()
-            # 额外等待归档页 API 数据返回 + Vue 渲染完成
-            time.sleep(1)
+            # 等待归档页 API 数据返回并渲染出年份分组（替代固定 sleep）
+            WebDriverWait(driver, 10).until(lambda d: archive.get_year_titles())
             # 1. 验证年份分组存在
             years = archive.get_year_titles()
             assert len(years) > 0, "归档页面应按年分组显示文章"
@@ -66,8 +62,8 @@ class TestMyArticle:
                 target_month = months[0]
             archive.click_month_by_name(target_month)
             archive.wait_for_page_ready()
-            # 等待展开动画 + 文章列表渲染
-            time.sleep(0.5)
+            # 等待展开动画完成且月份文章列表渲染（替代固定 sleep）
+            WebDriverWait(driver, 5).until(lambda d: archive.get_month_article_titles())
             # 4. 验证展开后显示文章标题
             titles = archive.get_month_article_titles()
             assert len(titles) > 0, f"展开月份 {target_month} 后应显示文章标题"

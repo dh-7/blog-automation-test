@@ -103,6 +103,20 @@ class BasePage:
             pass
         log.info(f"输入: {loc} -> {text}")
 
+    @allure.step("替换输入")
+    def input_replace(self, loc, text):
+        """替换输入：点击聚焦 → Ctrl+A 全选 → 输入新值
+
+        用于可能已有旧值的输入框：clear() 对部分受控组件不生效，
+        Ctrl+A 全选后直接输入可确保旧值被完整覆盖。
+        """
+        from selenium.webdriver.common.keys import Keys
+        el = self.find(loc)
+        el.click()
+        el.send_keys(Keys.CONTROL, 'a')
+        el.send_keys(text)
+        log.info(f"替换输入: {loc} -> {text}")
+
     @allure.step("清空")
     def clear(self, loc):
         """清空输入框"""

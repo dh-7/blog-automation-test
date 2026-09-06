@@ -1,17 +1,15 @@
 from selenium.webdriver.common.by import By
-from base import BasePage
+from base import BasePage, TablePageMixin
 import allure
 
 
-class PageAdminUserManage(BasePage):
+class PageAdminUserManage(TablePageMixin, BasePage):
     """管理员-用户管理页面类 — 元素定位 + 原子操作"""
 
     page_path = '/admin/users'
 
     def __init__(self, driver):
         super().__init__(driver)
-        # 表格元素
-        self.table_rows = (By.CSS_SELECTOR, ".el-table__row")
         # 编辑用户弹窗
         self.edit_dialog = (By.XPATH, '//div[contains(@class,"el-dialog")]//div[contains(@class,"el-dialog__title") and text()="编辑用户"]/ancestor::div[contains(@class,"el-dialog")]')
         self.edit_nickname = (By.XPATH, '//div[contains(@class,"el-dialog")]//label[text()="昵称"]/following::input[1]')
@@ -41,18 +39,7 @@ class PageAdminUserManage(BasePage):
             EC.visibility_of_element_located(self.reset_pwd_input)
         )
 
-    # ==================== 表格数据读取 ====================
-
-    def get_table_rows(self):
-        return self.find_all(self.table_rows)
-
-    def get_row_count(self):
-        return len(self.get_table_rows())
-
-    def get_cell_text(self, row_index, col_index):
-        rows = self.get_table_rows()
-        cells = rows[row_index].find_elements(By.CSS_SELECTOR, ".el-table__cell, td")
-        return cells[col_index].text.strip()
+    # ==================== 表格数据读取（通用能力见 TablePageMixin） ====================
 
     def get_user_id(self, row_index):
         return self.get_cell_text(row_index, 0)
@@ -76,9 +63,7 @@ class PageAdminUserManage(BasePage):
 
     @allure.step("点击编辑用户")
     def click_edit_by_index(self, row_index):
-        rows = self.get_table_rows()
-        btn = rows[row_index].find_element(By.XPATH, './/button[contains(.,"编辑")]')
-        btn.click()
+        self.click_row_button(row_index, "编辑")
 
     @allure.step("按用户名编辑用户")
     def click_edit_by_username(self, username):
@@ -89,19 +74,11 @@ class PageAdminUserManage(BasePage):
 
     @allure.step("输入编辑昵称")
     def input_edit_nickname(self, nickname):
-        el = self.find(self.edit_nickname)
-        el.click()
-        from selenium.webdriver.common.keys import Keys
-        el.send_keys(Keys.CONTROL, 'a')
-        el.send_keys(nickname)
+        self.input_replace(self.edit_nickname, nickname)
 
     @allure.step("输入编辑邮箱")
     def input_edit_email(self, email):
-        el = self.find(self.edit_email)
-        el.click()
-        from selenium.webdriver.common.keys import Keys
-        el.send_keys(Keys.CONTROL, 'a')
-        el.send_keys(email)
+        self.input_replace(self.edit_email, email)
 
     @allure.step("点击保存编辑")
     def click_edit_save(self):
@@ -115,9 +92,7 @@ class PageAdminUserManage(BasePage):
 
     @allure.step("点击重置密码")
     def click_reset_pwd_by_index(self, row_index):
-        rows = self.get_table_rows()
-        btn = rows[row_index].find_element(By.XPATH, './/button[contains(.,"重置密码")]')
-        btn.click()
+        self.click_row_button(row_index, "重置密码")
 
     @allure.step("按用户名重置密码")
     def click_reset_pwd_by_username(self, username):
@@ -128,11 +103,7 @@ class PageAdminUserManage(BasePage):
 
     @allure.step("输入新密码")
     def input_new_password(self, password):
-        el = self.find(self.reset_pwd_input)
-        el.click()
-        from selenium.webdriver.common.keys import Keys
-        el.send_keys(Keys.CONTROL, 'a')
-        el.send_keys(password)
+        self.input_replace(self.reset_pwd_input, password)
 
     @allure.step("确认重置")
     def click_reset_confirm(self):
@@ -153,13 +124,7 @@ class PageAdminUserManage(BasePage):
         Returns:
             行索引 (int)，未找到返回 -1
         """
-        uid_str = str(uid)
-        rows = self.get_table_rows()
-        for i, row in enumerate(rows):
-            cells = row.find_elements(By.CSS_SELECTOR, ".el-table__cell, td")
-            if cells and cells[0].text.strip() == uid_str:
-                return i
-        return -1
+        return self.find_row_index_by_first_cell(uid)
 
     @staticmethod
     def _extract_id(raw):

@@ -1,9 +1,9 @@
 from selenium.webdriver.common.by import By
-from base import BasePage
+from base import BasePage, TablePageMixin
 import allure
 
 
-class PageAdminArticleManage(BasePage):
+class PageAdminArticleManage(TablePageMixin, BasePage):
     """管理员-文章管理页面类 — 元素定位 + 原子操作"""
 
     page_path = '/admin/articles'
@@ -14,9 +14,6 @@ class PageAdminArticleManage(BasePage):
         self.search_input = (By.CSS_SELECTOR, 'input[placeholder="搜索文章标题..."]')
         self.search_button = (By.XPATH, '//div[contains(@class,"el-input-group")]//button')
         self.total_tag = (By.CSS_SELECTOR, "#app > div > main > div > div > div > div:nth-child(1) > span > span")
-        # 表格元素
-        self.table_rows = (By.CSS_SELECTOR, ".el-table__row")
-        self.table = (By.CSS_SELECTOR, ".el-table")
         # 分页
         self.pagination = (By.CSS_SELECTOR, ".el-pagination")
         self.prev_page = (By.CSS_SELECTOR, ".el-pagination .btn-prev")
@@ -34,7 +31,7 @@ class PageAdminArticleManage(BasePage):
     def clear_search(self):
         self.clear(self.search_input)
 
-    # ==================== 表格数据读取 ====================
+    # ==================== 表格数据读取（通用能力见 TablePageMixin） ====================
 
     def get_total_text(self):
         return self.get_text(self.total_tag)
@@ -42,27 +39,6 @@ class PageAdminArticleManage(BasePage):
     def get_total_count(self):
         text = self.get_total_text()
         return int(''.join(filter(str.isdigit, text)))
-
-    def get_table_rows(self):
-        """获取表格所有行，空表时返回空列表"""
-        try:
-            from selenium.webdriver.support.wait import WebDriverWait
-            WebDriverWait(self.driver, 5).until(
-                lambda d: len(d.find_elements(By.CSS_SELECTOR, ".el-table__row")) > 0
-                   or len(d.find_elements(By.CSS_SELECTOR, ".el-table__empty-text")) > 0
-            )
-        except Exception:
-            pass
-        rows = self.driver.find_elements(By.CSS_SELECTOR, ".el-table__row")
-        return rows
-
-    def get_row_count(self):
-        return len(self.get_table_rows())
-
-    def get_cell_text(self, row_index, col_index):
-        rows = self.get_table_rows()
-        cells = rows[row_index].find_elements(By.CSS_SELECTOR, ".el-table__cell, td")
-        return cells[col_index].text.strip()
 
     def get_article_id(self, row_index):
         return self.get_cell_text(row_index, 0)
@@ -89,9 +65,7 @@ class PageAdminArticleManage(BasePage):
 
     @allure.step("点击删除文章")
     def click_delete_by_index(self, row_index):
-        rows = self.get_table_rows()
-        btn = rows[row_index].find_element(By.XPATH, './/button[contains(.,"删除")]')
-        btn.click()
+        self.click_row_button(row_index, "删除")
 
     @allure.step("按标题删除文章")
     def click_delete_by_title(self, title):

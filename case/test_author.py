@@ -7,15 +7,11 @@ from page.page_author import PageAuthor
 from utils import db_query
 from utils.assert_helpers import auto_assert
 from utils.paths import UI_DATASOURCE as DATASOURCE
-from base.data_loader import UiDataLoader
+from utils.excel_loader import load_ui_cases
 import allure
 import re
 
-_loader = UiDataLoader(DATASOURCE)
-_cases = _loader.load_functional_cases(module="作者主页")
-_loader.close()
-_params = [(c.case_id, c) for c in _cases]
-_ids = [c.case_id for c in _cases]
+_params, _ids = load_ui_cases(module="作者主页")
 
 
 @allure.epic("UI自动化测试")

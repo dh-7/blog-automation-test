@@ -12,6 +12,8 @@ import os
 import re
 import openpyxl
 
+from utils.paths import UI_DATASOURCE
+
 
 # ============================================================
 #  公共基类
@@ -274,3 +276,37 @@ class UiCaseLoader(BaseExcelLoader):
             return ""
         val = row[idx]
         return str(val).strip() if val is not None else ""
+
+
+# ============================================================
+#  用例文件便捷加载函数
+# ============================================================
+
+def load_ui_cases(module=None):
+    """加载 UI 功能用例，返回 (params, ids) 供 parametrize 使用
+
+    替代各用例文件重复的 UiDataLoader open/close 样板：
+
+        from utils.excel_loader import load_ui_cases
+        _params, _ids = load_ui_cases(module='登录')
+
+        @pytest.mark.parametrize('case_id,case', _params, ids=_ids)
+    """
+    loader = UiCaseLoader(UI_DATASOURCE)
+    try:
+        cases = loader.load_functional_cases(module=module)
+    finally:
+        loader.close()
+    params = [(c.case_id, c) for c in cases]
+    ids = [c.case_id for c in cases]
+    return params, ids
+
+
+def load_ui_flow_cases():
+    """加载 YW_ 业务流程用例，返回 {case_id: UiCase} 索引"""
+    loader = UiCaseLoader(UI_DATASOURCE)
+    try:
+        cases = loader.load_flow_cases()
+    finally:
+        loader.close()
+    return {c.case_id: c for c in cases}

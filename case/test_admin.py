@@ -1,7 +1,7 @@
 import re
 import pytest
 from selenium.webdriver.common.by import By
-from base.data_loader import UiDataLoader
+from utils.excel_loader import load_ui_cases
 from page.page_admin_dashboard import PageAdminDashboard
 from page.page_admin_article_manage import PageAdminArticleManage
 from page.page_admin_comment_manage import PageAdminCommentManage
@@ -13,11 +13,7 @@ from utils.paths import UI_DATASOURCE as DATASOURCE
 import allure
 
 
-_loader = UiDataLoader(DATASOURCE)
-_cases = _loader.load_functional_cases(module='后台管理')
-_loader.close()
-_params = [(c.case_id, c) for c in _cases]
-_ids = [c.case_id for c in _cases]
+_params, _ids = load_ui_cases(module='后台管理')
 
 
 def _extract_id(raw):

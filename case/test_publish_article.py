@@ -1,5 +1,5 @@
 import pytest
-from base.data_loader import UiDataLoader
+from utils.excel_loader import load_ui_cases
 from page.page_publish_article import PagePublishArticle
 from page.page_article_detail import PageArticleDetail
 from utils.paths import UI_DATASOURCE as DATASOURCE
@@ -9,11 +9,7 @@ from case.conftest import login
 import allure
 
 
-_loader = UiDataLoader(DATASOURCE)
-_cases = _loader.load_functional_cases(module='发布文章')
-_loader.close()
-_params = [(c.case_id, c) for c in _cases]
-_ids = [c.case_id for c in _cases]
+_params, _ids = load_ui_cases(module='发布文章')
 
 
 def _publish(driver, u, p, title, content, publish_url, category_name=None, tag_names=None):

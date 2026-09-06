@@ -1,6 +1,6 @@
 """通知模块 UI 测试 — 数据驱动"""
 import os, sys, pytest
-from base.data_loader import UiDataLoader
+from utils.excel_loader import load_ui_cases
 from page.page_login import PageLogin
 from page.page_notification import PageNotification
 from selenium.webdriver.common.by import By
@@ -10,11 +10,7 @@ from utils.assert_helpers import auto_assert
 from utils.paths import UI_DATASOURCE as DATASOURCE
 import allure
 
-_loader = UiDataLoader(DATASOURCE)
-_cases = _loader.load_functional_cases(module="通知")
-_loader.close()
-_params = [(c.case_id, c) for c in _cases]
-_ids = [c.case_id for c in _cases]
+_params, _ids = load_ui_cases(module="通知")
 
 
 def _db_unread(username):

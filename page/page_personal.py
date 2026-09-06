@@ -132,27 +132,15 @@ class PagePersonal(BasePage):
 
     @allure.step("填写昵称")
     def fill_nickname(self, nickname):
-        el = self.find(self.nickname_input)
-        el.click()
-        from selenium.webdriver.common.keys import Keys
-        el.send_keys(Keys.CONTROL, 'a')
-        el.send_keys(nickname)
+        self.input_replace(self.nickname_input, nickname)
 
     @allure.step("填写简介")
     def fill_bio(self, bio):
-        el = self.find(self.bio_input)
-        el.click()
-        from selenium.webdriver.common.keys import Keys
-        el.send_keys(Keys.CONTROL, 'a')
-        el.send_keys(bio)
+        self.input_replace(self.bio_input, bio)
 
     @allure.step("填写邮箱")
     def fill_email(self, email):
-        el = self.find(self.email_input)
-        el.click()
-        from selenium.webdriver.common.keys import Keys
-        el.send_keys(Keys.CONTROL, 'a')
-        el.send_keys(email)
+        self.input_replace(self.email_input, email)
 
     @allure.step("点击保存设置")
     def click_save(self):
@@ -168,29 +156,17 @@ class PagePersonal(BasePage):
     @allure.step("填写原密码")
     def fill_old_password(self, pwd):
         """填写原密码"""
-        el = self.find(self.old_password_input)
-        el.click()
-        from selenium.webdriver.common.keys import Keys
-        el.send_keys(Keys.CONTROL, 'a')
-        el.send_keys(pwd)
+        self.input_replace(self.old_password_input, pwd)
 
     @allure.step("填写新密码")
     def fill_new_password(self, pwd):
         """填写新密码"""
-        el = self.find(self.new_password_input)
-        el.click()
-        from selenium.webdriver.common.keys import Keys
-        el.send_keys(Keys.CONTROL, 'a')
-        el.send_keys(pwd)
+        self.input_replace(self.new_password_input, pwd)
 
     @allure.step("填写确认密码")
     def fill_confirm_password(self, pwd):
         """填写确认密码"""
-        el = self.find(self.confirm_password_input)
-        el.click()
-        from selenium.webdriver.common.keys import Keys
-        el.send_keys(Keys.CONTROL, 'a')
-        el.send_keys(pwd)
+        self.input_replace(self.confirm_password_input, pwd)
 
     @allure.step("点击修改密码")
     def click_change_password(self):

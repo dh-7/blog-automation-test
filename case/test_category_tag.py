@@ -5,14 +5,10 @@ from page.page_category import PageCategory
 from utils import db_query
 from utils.assert_helpers import auto_assert
 from utils.paths import UI_DATASOURCE as DATASOURCE
-from base.data_loader import UiDataLoader
+from utils.excel_loader import load_ui_cases
 import allure
 
-_loader = UiDataLoader(DATASOURCE)
-_cases = _loader.load_functional_cases(module="分类与标签")
-_loader.close()
-_params = [(c.case_id, c) for c in _cases]
-_ids = [c.case_id for c in _cases]
+_params, _ids = load_ui_cases(module="分类与标签")
 
 
 @allure.epic("UI自动化测试")
@@ -66,10 +62,18 @@ class TestCategoryTag:
         if case_id == 'FC-FQBQ-003':
             home.click_category_by_name(category)
             home.wait_for_loading_finish()
-            time.sleep(0.6)  # 等待列表重渲染，避免 stale element
-            shown = home.get_all_article_titles()
-            assert shown, f"分类'{category}'下应有文章"
+            # 轮询等待列表重渲染为该分类结果（替代固定 sleep，避免读到重渲染前的旧列表）
             allowed = set(db_query.article_titles_by_category(category))
+            deadline = time.time() + 8
+            shown = []
+            while True:
+                shown = home.get_all_article_titles()
+                if shown and all(t in allowed for t in shown):
+                    break
+                if time.time() >= deadline:
+                    break
+                time.sleep(0.3)
+            assert shown, f"分类'{category}'下应有文章"
             for t in shown:
                 assert t in allowed, f"分类筛选结果'{t}'不属于分类'{category}'"
             return
