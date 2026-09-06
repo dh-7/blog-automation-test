@@ -45,6 +45,11 @@ class TestAuthor:
                 no_pub = db_query.author_without_published()
                 assert no_pub, "前置数据缺失：DB 中不存在没有已发布文章的用户"
                 path = f"/author/{no_pub}"
+            elif case_id == 'FC-ZZY-005':
+                # 访问"不存在的用户主页"：动态取一个必定不存在的用户ID
+                no_user = db_query.scalar(
+                    "SELECT COALESCE(MAX(id),0)+1 FROM user")
+                path = f"/author/{no_user}"
             else:
                 path = "/author/2"
         author.open_url(path)
