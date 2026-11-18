@@ -25,6 +25,9 @@ env/
 .env.local
 .env.*.local
 
+# Local test environment configuration (use config.example.yaml as template)
+/config.yaml
+
 # ========================
 # pytest / 测试缓存
 # ========================
@@ -97,6 +100,7 @@ $RECYCLE.BIN/
 *.swp
 *~
 .cache/
+.tmp/
 
 # ========================
 # 本地工具目录

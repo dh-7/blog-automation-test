@@ -1,0 +1,33 @@
+# Copy this file to config.yaml and set values for your local test environment.
+browser:
+  chrome_path: ""
+  driver_path: ""
+  headless: true
+  implicit_wait: 0
+
+env:
+  base_url: "http://localhost:5173"
+  api_url: "http://localhost:8080"
+  timeout: 10
+
+account:
+  username: "zhangsan"
+  password: "change-me"
+
+log:
+  level: "INFO"
+  dir: "log"
+
+screenshot:
+  dir: "report"
+
+datasource:
+  ui_file: "data/博客系统-自动化测试数据源.xlsx"
+  api_file: "data/博客系统-接口自动化数据源.xlsx"
+
+mysql:
+  host: "localhost"
+  port: 3306
+  user: "blog_test"
+  password: "change-me"
+  database: "blog_db"

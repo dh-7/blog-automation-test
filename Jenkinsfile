@@ -4,7 +4,7 @@
 //   - 已安装 Python 3.12+、Git，且在系统 PATH 中
 //   - agent 能访问被测后端(8080) 与 MySQL(3306)，且 mysql/mysqldump 命令行可用
 //   - 已安装插件：Allure Jenkins Plugin
-//   - 已创建凭据：Secret text，ID 为 blog-db-password（MySQL root 密码）
+//   - 已创建凭据：Secret text，ID 为 blog-db-password（专用测试数据库账号密码）
 //   - 接口自动化不需要 Chrome/浏览器
 pipeline {
     agent { label 'windows' }
@@ -17,7 +17,7 @@ pipeline {
     }
 
     // 触发方式二选一：
-    //   1) Webhook（推荐，要求 GitHub/Gitee 能访问到 Jenkins）：在任务里勾选
+    //   1) Webhook（推荐，要求 GitHub 能访问到 Jenkins）：在任务里勾选
     //      "GitHub hook trigger for GITScm polling"，并注释掉下面的 pollSCM
     //   2) 轮询 SCM（内网 Jenkins 用，默认）：每 5 分钟检查一次代码变更
     triggers {
@@ -43,6 +43,8 @@ pipeline {
         stage('环境准备') {
             steps {
                 bat 'python --version'
+                // config.yaml 是本地文件且不提交仓库；每次构建都用脱敏模板初始化
+                bat 'copy /Y config.example.yaml config.yaml'
                 bat 'if not exist .venv python -m venv .venv'
                 bat '%PYTHON% -m pip install --upgrade pip -q'
                 bat '%PYTHON% -m pip install -r requirements.txt -q'
